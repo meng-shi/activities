@@ -21,36 +21,29 @@ export async function getEvents(
 ): Promise<PaginatedResponse<Event>> {
   const sql = getSql();
   const conditions: string[] = [];
-  const params: (string | number)[] = [];
-  let paramIndex = 1;
 
   if (filters.county) {
-    conditions.push(`county = $${paramIndex++}`);
-    params.push(filters.county);
+    conditions.push(`county = '${filters.county.replace(/'/g, "''")}'`);
   }
 
   if (filters.category) {
-    conditions.push(`category = $${paramIndex++}`);
-    params.push(filters.category);
+    conditions.push(`category = '${filters.category.replace(/'/g, "''")}'`);
   }
 
   if (filters.search) {
-    conditions.push(`(title ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`);
-    params.push(`%${filters.search}%`);
-    paramIndex++;
+    const search = filters.search.replace(/'/g, "''");
+    conditions.push(`(title ILIKE '%${search}%' OR description ILIKE '%${search}%')`);
   }
 
   if (filters.price) {
-    conditions.push(`price = $${paramIndex++}`);
-    params.push(filters.price);
+    conditions.push(`price = '${filters.price.replace(/'/g, "''")}'`);
   }
 
   if (filters.date) {
     const today = new Date().toISOString().split('T')[0];
     switch (filters.date) {
       case 'today':
-        conditions.push(`date = $${paramIndex++}`);
-        params.push(today);
+        conditions.push(`date = '${today}'`);
         break;
       case 'weekend': {
         const d = new Date();
@@ -59,19 +52,14 @@ export async function getEvents(
         weekendStart.setDate(d.getDate() + (6 - dayOfWeek));
         const weekendEnd = new Date(weekendStart);
         weekendEnd.setDate(weekendStart.getDate() + 1);
-        conditions.push(`date >= $${paramIndex++} AND date <= $${paramIndex++}`);
-        params.push(weekendStart.toISOString().split('T')[0], weekendEnd.toISOString().split('T')[0]);
+        conditions.push(`date >= '${weekendStart.toISOString().split('T')[0]}' AND date <= '${weekendEnd.toISOString().split('T')[0]}'`);
         break;
       }
       case 'week':
         const weekEnd = new Date();
         weekEnd.setDate(weekEnd.getDate() + 7);
-        conditions.push(`date >= $${paramIndex++} AND date <= $${paramIndex++}`);
-        params.push(today, weekEnd.toISOString().split('T')[0]);
+        conditions.push(`date >= '${today}' AND date <= '${weekEnd.toISOString().split('T')[0]}'`);
         break;
-      default:
-        conditions.push(`date = $${paramIndex++}`);
-        params.push(filters.date);
     }
   }
 
@@ -80,7 +68,7 @@ export async function getEvents(
 
   let countResult;
   if (conditions.length > 0) {
-    countResult = await sql`SELECT COUNT(*) as total FROM events WHERE ${sql.unsafe(conditions.join(' AND '))}` as unknown as [{ total: string }];
+    countResult = await sql`SELECT COUNT(*) as total FROM events WHERE ${sql.unsafe(whereClause.replace('WHERE ', ''))}` as unknown as [{ total: string }];
   } else {
     countResult = await sql`SELECT COUNT(*) as total FROM events` as unknown as [{ total: string }];
   }
@@ -89,7 +77,7 @@ export async function getEvents(
 
   let eventsResult;
   if (conditions.length > 0) {
-    eventsResult = await sql`SELECT * FROM events WHERE ${sql.unsafe(conditions.join(' AND '))} ORDER BY date ASC, time ASC LIMIT ${limit} OFFSET ${offset}` as unknown as Event[];
+    eventsResult = await sql`SELECT * FROM events WHERE ${sql.unsafe(whereClause.replace('WHERE ', ''))} ORDER BY date ASC, time ASC LIMIT ${limit} OFFSET ${offset}` as unknown as Event[];
   } else {
     eventsResult = await sql`SELECT * FROM events ORDER BY date ASC, time ASC LIMIT ${limit} OFFSET ${offset}` as unknown as Event[];
   }
@@ -105,7 +93,7 @@ export async function getEvents(
   };
 }
 
-export async function getEventById(id: string): Promise<Event | null> {
+  export async function getEventById(id: string): Promise<Event | null> {
   const sql = getSql();
   const result = await sql`SELECT * FROM events WHERE id = ${id}` as unknown as Event[];
   return result[0] || null;
