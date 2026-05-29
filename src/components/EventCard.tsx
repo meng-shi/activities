@@ -5,15 +5,19 @@ import { format } from 'date-fns';
 
 interface EventCardProps {
   event: Event;
+  onClick: () => void;
 }
 
-export default function EventCard({ event }: EventCardProps) {
+export default function EventCard({ event, onClick }: EventCardProps) {
   const formattedDate = event.date
     ? format(new Date(event.date), 'EEE, MMM d, yyyy')
     : 'Date TBA';
 
   return (
-    <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-4 border border-gray-100">
+    <button
+      onClick={onClick}
+      className="w-full text-left bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-4 border border-gray-100 hover:border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
       <div className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-semibold text-lg text-gray-900 line-clamp-2">
@@ -70,18 +74,9 @@ export default function EventCard({ event }: EventCardProps) {
               </span>
             )}
           </div>
-          {event.source_url && (
-            <a
-              href={event.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-500 hover:text-blue-700"
-            >
-              View Source →
-            </a>
-          )}
+          <span className="text-xs text-blue-500">Click for details →</span>
         </div>
       </div>
-    </div>
+    </button>
   );
 }

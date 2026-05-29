@@ -6,46 +6,101 @@ import EventList from '@/components/EventList';
 import FilterPanel, { FilterState } from '@/components/FilterPanel';
 import FloatingChatButton from '@/components/FloatingChatButton';
 
+interface EventsJson {
+  events: Event[];
+  generated: string;
+}
+
 export default function Home() {
-  const [events, setEvents] = useState<Event[]>([]);
+  const [allEvents, setAllEvents] = useState<Event[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
   const [filters, setFilters] = useState<FilterState>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
 
   useEffect(() => {
-    fetchEvents();
-  }, [filters]);
+    fetch('/events.json')
+      .then(res => res.json())
+      .then((data: EventsJson) => {
+        setAllEvents(data.events);
+        setFilteredEvents(data.events);
+        setPagination(prev => ({ ...prev, total: data.events.length, pages: Math.ceil(data.events.length / 20) }));
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
-  const fetchEvents = async (page: number = 1) => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set('page', page.toString());
-      params.set('limit', '20');
+  useEffect(() => {
+    if (allEvents.length === 0) return;
 
-      if (filters.county) params.set('county', filters.county);
-      if (filters.category) params.set('category', filters.category);
-      if (filters.date) params.set('date', filters.date);
-      if (filters.search) params.set('search', filters.search);
+    let filtered = [...allEvents];
 
-      const response = await fetch(`/api/events?${params.toString()}`);
-      const data: PaginatedResponse<Event> = await response.json();
-
-      setEvents(data.data);
-      setPagination(data.pagination);
-    } catch (error) {
-      console.error('Error fetching events:', error);
-    } finally {
-      setLoading(false);
+    if (filters.county) {
+      filtered = filtered.filter(e => e.county === filters.county);
     }
-  };
+
+    if (filters.category) {
+      filtered = filtered.filter(e => e.category === filters.category);
+    }
+
+    if (filters.search) {
+      const search = filters.search.toLowerCase();
+      filtered = filtered.filter(e =>
+        e.title.toLowerCase().includes(search) ||
+        (e.description && e.description.toLowerCase().includes(search))
+      );
+    }
+
+    if (filters.date) {
+      const today = new Date().toISOString().split('T')[0];
+      switch (filters.date) {
+        case 'today':
+          filtered = filtered.filter(e => e.date === today);
+          break;
+        case 'weekend': {
+          const d = new Date();
+          const dayOfWeek = d.getDay();
+          const weekendStart = new Date(d);
+          weekendStart.setDate(d.getDate() + (6 - dayOfWeek));
+          const weekendEnd = new Date(weekendStart);
+          weekendEnd.setDate(weekendStart.getDate() + 1);
+          filtered = filtered.filter(e => {
+            const ed = new Date(e.date);
+            return ed >= weekendStart && ed <= weekendEnd;
+          });
+          break;
+        }
+        case 'week': {
+          const weekEnd = new Date();
+          weekEnd.setDate(weekEnd.getDate() + 7);
+          filtered = filtered.filter(e => e.date >= today && e.date <= weekEnd.toISOString().split('T')[0]);
+          break;
+        }
+      }
+    }
+
+    setPagination(prev => ({
+      ...prev,
+      total: filtered.length,
+      pages: Math.ceil(filtered.length / 20)
+    }));
+    setCurrentPage(1);
+    setFilteredEvents(filtered);
+  }, [filters, allEvents]);
 
   const handleFilterChange = (newFilters: FilterState) => {
     setFilters(newFilters);
   };
 
   const handlePageChange = (newPage: number) => {
-    fetchEvents(newPage);
+    setCurrentPage(newPage);
+  };
+
+  const getPageEvents = () => {
+    const start = (currentPage - 1) * 20;
+    const end = start + 20;
+    return filteredEvents.slice(start, end);
   };
 
   return (
@@ -70,27 +125,27 @@ export default function Home() {
           <div className="flex-1">
             <div className="flex items-center justify-between mb-4">
               <p className="text-gray-500">
-                {loading ? 'Loading...' : `${pagination.total} events found`}
+                {loading ? 'Loading...' : `${filteredEvents.length} events found`}
               </p>
             </div>
 
-            <EventList events={events} loading={loading} />
+            <EventList events={getPageEvents()} loading={loading} />
 
             {pagination.pages > 1 && (
               <div className="flex items-center justify-center gap-2 mt-6">
                 <button
-                  onClick={() => handlePageChange(pagination.page - 1)}
-                  disabled={pagination.page <= 1}
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage <= 1}
                   className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50"
                 >
                   Previous
                 </button>
                 <span className="px-4 py-2">
-                  Page {pagination.page} of {pagination.pages}
+                  Page {currentPage} of {pagination.pages}
                 </span>
                 <button
-                  onClick={() => handlePageChange(pagination.page + 1)}
-                  disabled={pagination.page >= pagination.pages}
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage >= pagination.pages}
                   className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50"
                 >
                   Next

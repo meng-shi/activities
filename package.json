@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "tsx scripts/generate-static-data.ts && next build",
     "start": "next start",
     "lint": "eslint",
-    "scrape": "python3 scripts/scrape.py"
+    "scrape": "tsx scripts/llm-scrape.ts",
+    "generate-data": "tsx scripts/generate-static-data.ts"
   },
   "dependencies": {
     "@brightdata/mcp": "^2.9.5",

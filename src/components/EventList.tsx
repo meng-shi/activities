@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { Event } from '@/lib/types';
 import EventCard from './EventCard';
+import EventModal from './EventModal';
 
 interface EventListProps {
   events: Event[];
@@ -9,6 +11,8 @@ interface EventListProps {
 }
 
 export default function EventList({ events, loading }: EventListProps) {
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -33,10 +37,13 @@ export default function EventList({ events, loading }: EventListProps) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {events.map((event) => (
-        <EventCard key={event.id} event={event} />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {events.map((event) => (
+          <EventCard key={event.id} event={event} onClick={() => setSelectedEvent(event)} />
+        ))}
+      </div>
+      <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+    </>
   );
 }
