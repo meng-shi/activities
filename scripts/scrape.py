@@ -40,24 +40,52 @@ import psycopg2
 from psycopg2.extras import execute_values
 
 SOURCES = [
+    # Existing working sources
     {'name': 'sfpl', 'url': 'https://sfpl.org/events', 'county': 'san_francisco', 'category': 'library'},
-    {'name': 'sf_recpark', 'url': 'https://sfrecpark.org/Calendar.aspx', 'county': 'san_francisco', 'category': 'outdoors'},
     {'name': 'funcheap', 'url': 'https://sf.funcheap.com', 'county': 'all', 'category': 'community'},
     {'name': 'sccld', 'url': 'https://sccld.org', 'county': 'santa_clara', 'category': 'library'},
     {'name': 'sjpl', 'url': 'https://sjpl.org', 'county': 'santa_clara', 'category': 'library'},
     {'name': 'oaklandlibrary', 'url': 'https://oaklandlibrary.org', 'county': 'alameda', 'category': 'library'},
-    {'name': 'berkeleypl', 'url': 'https://berkeleypubliclibrary.org', 'county': 'alameda', 'category': 'library'},
     {'name': 'aclibrary', 'url': 'https://aclibrary.org', 'county': 'alameda', 'category': 'library'},
-    {'name': 'ccclib', 'url': 'https://ccclib.org', 'county': 'contra_costa', 'category': 'library'},
     {'name': 'ebparks', 'url': 'https://ebparks.org', 'county': 'alameda', 'category': 'outdoors'},
     {'name': 'marinlib', 'url': 'https://marinlibrary.org', 'county': 'marin', 'category': 'library'},
     {'name': 'sonomalib', 'url': 'https://sonomalibrary.org', 'county': 'sonoma', 'category': 'library'},
-    {'name': 'solanolib', 'url': 'https://solanolibrary.com', 'county': 'solano', 'category': 'library'},
-    {'name': 'napalib', 'url': 'https://napalibrary.org', 'county': 'napa', 'category': 'library'},
     {'name': 'smcl', 'url': 'https://smcl.org', 'county': 'san_mateo', 'category': 'library'},
     {'name': 'dothebay', 'url': 'https://dothebay.com/free', 'county': 'all', 'category': 'community'},
     {'name': 'eventbrite', 'url': 'https://www.eventbrite.com/d/ca--san-francisco/free--events', 'county': 'all', 'category': 'community'},
     {'name': '19hz', 'url': 'https://19hz.info', 'county': 'all', 'category': 'music'},
+
+    # NEW SOURCES - Non-duplicated coverage
+    # San Mateo
+    {'name': 'historysmc', 'url': 'https://historysmc.org/events-calendar/', 'county': 'san_mateo', 'category': 'community'},
+
+    # Santa Clara
+    {'name': 'sccparks', 'url': 'https://parks.santaclaracounty.gov/events', 'county': 'santa_clara', 'category': 'outdoors'},
+    {'name': 'santaclaracity', 'url': 'https://www.santaclaraca.gov/recreation-community/events/events-calendar', 'county': 'santa_clara', 'category': 'community'},
+
+    # Alameda
+    {'name': '510families', 'url': 'https://www.510families.com/calendar/', 'county': 'alameda', 'category': 'family'},
+    {'name': 'eastbayexpress', 'url': 'https://eastbayexpress.com/events-calendar/', 'county': 'alameda', 'category': 'community'},
+
+    # Contra Costa (no coverage before!)
+    {'name': 'contracostalive', 'url': 'https://www.contracostalive.com/event', 'county': 'contra_costa', 'category': 'community'},
+    {'name': 'visitconcord', 'url': 'https://www.visitconcordca.com/events/', 'county': 'contra_costa', 'category': 'community'},
+    {'name': 'richmondside', 'url': 'https://richmondside.org/events/', 'county': 'contra_costa', 'category': 'community'},
+
+    # Marin
+    {'name': 'visitmarin', 'url': 'https://www.visitmarin.org/event-calendar/', 'county': 'marin', 'category': 'community'},
+    {'name': 'marinarts', 'url': 'https://marinarts.org/event/', 'county': 'marin', 'category': 'arts'},
+
+    # Napa (napalib broken, now have working sources!)
+    {'name': 'cityofnapa', 'url': 'https://www.cityofnapa.org/395/Community-Events', 'county': 'napa', 'category': 'community'},
+    {'name': 'napaoutdoors', 'url': 'https://napaoutdoors.org/events/', 'county': 'napa', 'category': 'outdoors'},
+
+    # Previously failed sources - keeping for retry assessment
+    {'name': 'sf_recpark', 'url': 'https://sfrecpark.org/Calendar.aspx', 'county': 'san_francisco', 'category': 'outdoors'},
+    {'name': 'berkeleypl', 'url': 'https://berkeleypubliclibrary.org', 'county': 'alameda', 'category': 'library'},
+    {'name': 'ccclib', 'url': 'https://ccclib.org', 'county': 'contra_costa', 'category': 'library'},
+    {'name': 'solanolib', 'url': 'https://solanolibrary.com', 'county': 'solano', 'category': 'library'},
+    {'name': 'napalib', 'url': 'https://napalibrary.org', 'county': 'napa', 'category': 'library'},
     {'name': 'reddit_bayarea', 'url': 'https://www.reddit.com/r/bayarea/', 'county': 'all', 'category': 'community'},
     {'name': 'richmond_parks', 'url': 'https://ci.richmond.ca.us', 'county': 'contra_costa', 'category': 'outdoors'},
 ]
