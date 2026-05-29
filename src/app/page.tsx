@@ -5,6 +5,7 @@ import { Event, PaginatedResponse } from '@/lib/types';
 import EventList from '@/components/EventList';
 import FilterPanel, { FilterState } from '@/components/FilterPanel';
 import FloatingChatButton from '@/components/FloatingChatButton';
+import PlanMyDay from '@/components/PlanMyDay';
 
 interface EventsJson {
   events: Event[];
@@ -117,6 +118,8 @@ export default function Home() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
+        <PlanMyDay />
+
         <div className="flex flex-col lg:flex-row gap-6">
           <aside className="lg:w-64 flex-shrink-0">
             <FilterPanel onFilterChange={handleFilterChange} />
