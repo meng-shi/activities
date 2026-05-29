@@ -231,3 +231,157 @@ export async function logScrapeComplete(
     console.log('Could not log scrape completion');
   }
 }
+
+const INTEREST_TO_CATEGORY_MAP: Record<string, string[]> = {
+  family: ['family', 'children', 'kids'],
+  kids: ['family', 'children', 'kids'],
+  children: ['family', 'children', 'kids'],
+  music: ['music', 'concert'],
+  concert: ['music', 'concert'],
+  art: ['arts', 'art', 'exhibit'],
+  arts: ['arts', 'art', 'exhibit'],
+  outdoor: ['outdoors', 'outdoor', 'nature', 'park'],
+  outdoors: ['outdoors', 'outdoor', 'nature', 'park'],
+  nature: ['outdoors', 'nature', 'park'],
+  sports: ['sports', 'fitness', 'exercise'],
+  fitness: ['sports', 'fitness', 'exercise'],
+  library: ['library', 'books'],
+  books: ['library', 'books'],
+  community: ['community', 'social'],
+  food: ['food', 'drink', 'dining'],
+  education: ['education', 'learning', 'workshop'],
+  workshop: ['education', 'learning', 'workshop'],
+  health: ['health', 'wellness'],
+  wellness: ['health', 'wellness'],
+};
+
+const COUNTY_ALIASES: Record<string, string> = {
+  'east bay': 'alameda',
+  'eastbay': 'alameda',
+  'oakland': 'alameda',
+  'berkeley': 'alameda',
+  'fremont': 'alameda',
+  'san francisco': 'san_francisco',
+  'sf': 'san_francisco',
+  'south bay': 'santa_clara',
+  'southbay': 'santa_clara',
+  'san jose': 'santa_clara',
+  'santa clara': 'santa_clara',
+  'palo alto': 'santa_clara',
+  'mountain view': 'santa_clara',
+  'sunnyvale': 'santa_clara',
+  'peninsula': 'san_mateo',
+  'redwood city': 'san_mateo',
+  'menlo park': 'san_mateo',
+  'marin': 'marin',
+  'sonoma': 'sonoma',
+  'napa': 'napa',
+  'vallejo': 'solano',
+  'fairfield': 'solano',
+  'contra costa': 'contra_costa',
+  'concord': 'contra_costa',
+  'richmond': 'contra_costa',
+};
+
+function normalizeCounty(location: string): string | null {
+  const lower = location.toLowerCase().trim();
+  return COUNTY_ALIASES[lower] || null;
+}
+
+export async function searchEventsForPlanning(
+  location: string,
+  interests: string[],
+  date: string,
+  startTime?: string,
+  endTime?: string
+): Promise<Event[]> {
+  const sql = getSql();
+
+  const county = normalizeCounty(location);
+
+  const today = new Date().toISOString().split('T')[0];
+  let targetDate = today;
+
+  if (date === 'today') {
+    targetDate = today;
+  } else if (date === 'tomorrow') {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    targetDate = tomorrow.toISOString().split('T')[0];
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    targetDate = date;
+  }
+
+  const categories: string[] = [];
+  for (const interest of interests) {
+    const mapped = INTEREST_TO_CATEGORY_MAP[interest.toLowerCase()];
+    if (mapped) {
+      categories.push(...mapped);
+    } else {
+      categories.push(interest.toLowerCase());
+    }
+  }
+
+  let events: Event[] = [];
+
+  if (county && categories.length > 0) {
+    const placeholders = categories.map(() => `%`).join('|');
+    const result = await sql`
+      SELECT * FROM events
+      WHERE county = ${county}
+        AND date = ${targetDate}
+        AND price = 'free'
+        AND (
+          category ILIKE ANY(${categories.map(c => `%${c}%`)})
+          OR title ILIKE ANY(${categories.map(c => `%${c}%`)})
+          OR description ILIKE ANY(${categories.map(c => `%${c}%`)})
+        )
+      ORDER BY time ASC
+      LIMIT 30
+    `;
+    events = result as unknown as Event[];
+  } else if (county) {
+    const result = await sql`
+      SELECT * FROM events
+      WHERE county = ${county}
+        AND date = ${targetDate}
+        AND price = 'free'
+      ORDER BY time ASC
+      LIMIT 30
+    `;
+    events = result as unknown as Event[];
+  } else if (categories.length > 0) {
+    const result = await sql`
+      SELECT * FROM events
+      WHERE date = ${targetDate}
+        AND price = 'free'
+        AND (
+          category ILIKE ANY(${categories.map(c => `%${c}%`)})
+          OR title ILIKE ANY(${categories.map(c => `%${c}%`)})
+          OR description ILIKE ANY(${categories.map(c => `%${c}%`)})
+        )
+      ORDER BY time ASC
+      LIMIT 30
+    `;
+    events = result as unknown as Event[];
+  } else {
+    const result = await sql`
+      SELECT * FROM events
+      WHERE date = ${targetDate}
+        AND price = 'free'
+      ORDER BY time ASC
+      LIMIT 30
+    `;
+    events = result as unknown as Event[];
+  }
+
+  let filteredEvents = events;
+  if (startTime && endTime) {
+    filteredEvents = events.filter(event => {
+      if (!event.time) return true;
+      return event.time >= startTime && event.time <= endTime;
+    });
+  }
+
+  return filteredEvents;
+}

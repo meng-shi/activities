@@ -141,3 +141,38 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   education: 'Education',
   health: 'Health & Wellness',
 };
+
+export interface DayPlanInput {
+  startTime: string;
+  endTime: string;
+  location: string;
+  interests: string[];
+  date: string;
+}
+
+export interface PlannedActivity {
+  time: string;
+  title: string;
+  location: string;
+  city: string;
+  description: string;
+  reason: string;
+  sourceUrl?: string;
+}
+
+export interface DayPlan {
+  date: string;
+  location: string;
+  activities: PlannedActivity[];
+  summary: string;
+  eventsCount: number;
+}
+
+export interface PlanDayRequest {
+  startTime?: string;
+  endTime?: string;
+  location?: string;
+  interests?: string[];
+  date?: string;
+  naturalLanguage?: string;
+}
