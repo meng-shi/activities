@@ -253,6 +253,9 @@ def filter_events_by_date_range(events, today, max_date):
     return filtered
 
 
+KNOWN_SOURCE_NAMES = {s['name'] for s in SOURCES}
+
+
 def upsert_events(events, source_name):
     """Upsert events to Neon PostgreSQL."""
     if not events:
@@ -263,6 +266,10 @@ def upsert_events(events, source_name):
 
     values = []
     for e in events:
+        event_source_name = e.get('source_name', source_name)
+        if event_source_name not in KNOWN_SOURCE_NAMES:
+            event_source_name = 'scraped'
+
         values.append((
             e.get('title', 'Unknown'),
             e.get('description', ''),
@@ -272,9 +279,9 @@ def upsert_events(events, source_name):
             e.get('city'),
             e.get('county', 'san_francisco'),
             e.get('url') or e.get('source_url', ''),
-            source_name,
+            event_source_name,
             'free',
-            get_category_for_source(source_name),
+            e.get('category') or get_category_for_source(event_source_name),
         ))
 
     query = """
@@ -601,11 +608,12 @@ def log_debug(source_name, tier_info, prompt, content, events):
 
 
 def scrape_source_agent(source):
-    """Original agent-based scraping for comparison."""
+    """Agent-based scraping with complete JSON output."""
     today = date.today()
     today_str = today.strftime('%Y-%m-%d')
     max_date = today + timedelta(days=MAX_DAYS_AHEAD)
     max_date_str = max_date.strftime('%Y-%m-%d')
+    domain = extract_domain(source['url'])
 
     agent = Agent(
         model=OpenAIChat(
@@ -626,64 +634,72 @@ def scrape_source_agent(source):
         debug_mode=False,
     )
 
-    critical_rules = """## CRITICAL RULES:
-1. Use multi-tool strategy - try multiple approaches if first fails
-2. If scrape_as_markdown returns empty content, try browser_navigate
-3. If browser also fails, use search_engine with query "site:{domain} events"
-4. Extract events from whatever content you get
-5. Today's date is {today_str}
+    system_prompt = """You are a web scraping agent specializing in extracting complete event data.
 
-## Error Reporting:
-If all methods fail, return:
-{{
-    "source_url": "{url}",
-    "data": [],
-    "error": "EXPLANATION of what failed"
-}}
-"""
+## Your Task
+Scrape free events from the given URL and return a complete JSON array of event objects.
+
+## Required JSON Output Format
+Return ONLY valid JSON - no markdown, no explanation, just the JSON array:
+
+[
+  {
+    "title": "Event Title - be descriptive and complete",
+    "description": "Full description of the event (or empty string if not available)",
+    "date": "YYYY-MM-DD format (e.g., 2026-05-29)",
+    "time": "HH:MM:SS 24-hour format (e.g., 19:00:00) or null",
+    "end_date": "YYYY-MM-DD or null (for multi-day events)",
+    "location": "Venue name (or null if not found)",
+    "address": "Street address (or null)",
+    "city": "City name (or null)",
+    "county": "san_francisco|san_mateo|santa_clara|alameda|contra_costa|marin|napa|sonoma|solano|all",
+    "latitude": decimal or null,
+    "longitude": decimal or null,
+    "price": "free" (always free events),
+    "category": "music|arts|community|family|outdoors|library|sports|food|education|other",
+    "source_url": "FULL URL to the individual event page (REQUIRED - do not leave empty)",
+    "source_name": "the source name (e.g., 'sfpl', 'funcheap', 'eventbrite') or 'scraped' if unknown",
+    "url": "same as source_url - include the direct link to this specific event"
+  }
+]
+
+## CRITICAL RULES
+1. source_url is REQUIRED - every event MUST have a unique URL to its individual event page
+2. If you cannot find an event page URL, construct one from: base URL + event ID/path
+3. If truly cannot determine URL, use the source page URL + event title hash as fallback
+4. source_name should match known sources when possible (sfpl, funcheap, sccld, sjpl, etc.)
+5. If source is not in your known list, use 'scraped' as source_name
+6. county must be one of: san_francisco, san_mateo, santa_clara, alameda, contra_costa, marin, napa, sonoma, solano, all
+7. Extract ALL events you can find - don't limit to just a few
+8. Today's date is """ + today_str + """
+
+## Multi-Tool Strategy
+1. First try scrape_as_markdown to get page content
+2. If that fails or returns empty, try browser_navigate with screenshot
+3. If still no content, use search_engine to find events listing
+4. Extract events from whatever content you get
+
+## Error Handling
+If no events found or error, return: [] (empty array)
+If critical error, include error message in your response but still return valid JSON"""
 
     if TEST_MODE:
-        critical_rules = """## CRITICAL RULES (Test Mode):
-1. ONLY scrape page 1 - do not scrape any additional pages
-2. Try multiple approaches: scrape_as_markdown first, then browser, then search
-3. Today's date is {today_str}
+        user_prompt = f"""Scrape free events from: {source['url']}
 
-## Error Reporting:
-If all methods fail, return:
-{{
-    "source_url": "{url}",
-    "data": [],
-    "error": "EXPLANATION"
-}}
-"""
+ONLY scrape page 1 - do not scrape additional pages.
+Today is {today_str}. Look for events from today to {max_date_str}.
 
-    prompt = f"""You are a web scraping agent. Your task is to scrape free events from: {source['url']}
+Return ONLY the JSON array of events. No explanation needed."""
+    else:
+        user_prompt = f"""Scrape free events from: {source['url']}
 
-{critical_rules}
+Page by page until you've captured all events in the date range.
+Today is {today_str}. Look for events from today to {max_date_str}.
 
-## Output Format:
-Return a JSON object with:
-{{
-    "source_url": "{source['url']}",
-    "scraped_at": "{today_str}",
-    "date_range": "{today_str} to {max_date_str}",
-    "data": [
-        {{
-            "title": "...",
-            "url": "...",
-            "date": "YYYY-MM-DD",
-            "time": "HH:MM:SS or null",
-            "location": "...",
-            "city": "...",
-            "description": "..."
-        }}
-    ]
-}}
-
-Now scrape {source['url']}{" page by page." if not TEST_MODE else " - ONLY scrape page 1."}"""
+Return ONLY the JSON array of events. No explanation needed."""
 
     try:
-        response = agent.run(prompt)
+        response = agent.run(user_prompt, system_prompt=system_prompt)
         content = str(response.content)
 
         if DEBUG_MODE:
@@ -692,15 +708,25 @@ Now scrape {source['url']}{" page by page." if not TEST_MODE else " - ONLY scrap
         events = parse_events_from_response(content)
         filtered = filter_events_by_date_range(events, today, max_date)
 
+        url_stats = {'with_url': 0, 'without_url': 0}
+        for e in filtered:
+            if e.get('url') or e.get('source_url'):
+                url_stats['with_url'] += 1
+            else:
+                url_stats['without_url'] += 1
+
+        print(f"    [URL Stats] With URL: {url_stats['with_url']}, Without URL: {url_stats['without_url']}")
+
         tier_info = {
             'tier_reached': 'agent',
             'attempts': {'t1': 1, 't2': 0, 't3': 0},
             'total_attempts': 1,
             'error': None,
             'raw_content': content,
+            'url_stats': url_stats,
         }
 
-        log_debug(source['name'], tier_info, prompt, content, filtered)
+        log_debug(source['name'], tier_info, system_prompt + user_prompt, content, filtered)
 
         return filtered
     except Exception as e:
