@@ -2,31 +2,42 @@
 """
 SF Bay Area Events Scraper
 
-Uses agno + BrightDataTools to scrape free events from 20 SF Bay Area sources.
-Writes directly to Neon PostgreSQL with upsert logic.
+Uses agno + BrightDataTools with multi-tier fallback scraping.
+Tier 1: scrape_as_markdown → Tier 2: browser_navigate → Tier 3: search_engine
 
 Usage:
     python3 scripts/scrape.py
+    python3 scripts/scrape.py --test  (single page only)
+    python3 scripts/scrape.py --debug (save debug logs)
 """
 
 import json
 import os
 import re
 import sys
+import time
 from datetime import date, datetime, timedelta
 from dotenv import load_dotenv
+from pathlib import Path
 
 load_dotenv(dotenv_path='.env.local')
+
+DEBUG_MODE = '--debug' in sys.argv
+TEST_MODE = '--test' in sys.argv
+DEBUG_DIR = Path('debug_logs')
+
+# Constants
+RETRY_DELAY = 2  # seconds between retries
+MIN_CONTENT_LENGTH = 200  # minimum chars for valid content
+MAX_RETRIES_PER_TIER = 2
+MAX_DAYS_AHEAD = 7
+MAX_PAGES_PER_SOURCE = 10
 
 from agno.agent import Agent
 from agno.models.openai import OpenAIChat
 from agno.tools.brightdata import BrightDataTools
 import psycopg2
 from psycopg2.extras import execute_values
-
-MAX_DAYS_AHEAD = 7
-MAX_PAGES_PER_SOURCE = 10
-TEST_MODE = '--test' in sys.argv
 
 SOURCES = [
     {'name': 'sfpl', 'url': 'https://sfpl.org/events', 'county': 'san_francisco', 'category': 'library'},
@@ -56,9 +67,75 @@ def get_db_connection():
     return psycopg2.connect(os.getenv('DATABASE_URL'))
 
 
+def wait_and_retry(delay=RETRY_DELAY):
+    time.sleep(delay)
+
+
+def call_llm(prompt, max_tokens=4000):
+    """Call MiniMax-M2.5 LLM directly for extraction."""
+    response = fetch(
+        'https://api.minimax.io/v1/text/chatcompletion_v2',
+        method='POST',
+        headers={
+            'Content-Type': 'application/json',
+            'Authorization': f"Bearer {os.getenv('MINIMAX_API_KEY')}",
+        },
+        body=json.dumps({
+            'model': 'MiniMax-M2.5',
+            'messages': [
+                {'role': 'system', 'content': 'You extract structured event data from text. Return ONLY valid JSON.'},
+                {'role': 'user', 'content': prompt},
+            ],
+            'max_tokens': max_tokens,
+            'temperature': 0.1,
+            'reasoning_split': True,
+        }),
+    )
+    data = response.json()
+    return data.get('choices', [{}])[0].get('message', {}).get('content', '')
+
+
+def fetch(url, method='GET', headers=None, body=None):
+    """Simple fetch wrapper."""
+    import urllib.request
+    import urllib.error
+
+    req = urllib.request.Request(url, method=method)
+    if headers:
+        for k, v in headers.items():
+            req.add_header(k, v)
+    if body:
+        req.add_header('Content-Type', 'application/json')
+        req.data = body.encode('utf-8')
+
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            return type('Response', (), {
+                'ok': True,
+                'status': response.status,
+                'json': lambda: json.loads(response.read().decode('utf-8')),
+                'text': lambda: response.read().decode('utf-8'),
+            })()
+    except urllib.error.HTTPError as e:
+        return type('Response', (), {
+            'ok': False,
+            'status': e.code,
+            'json': lambda: {'error': str(e)},
+            'text': lambda: str(e),
+        })()
+    except Exception as e:
+        return type('Response', (), {
+            'ok': False,
+            'status': 0,
+            'json': lambda: {'error': str(e)},
+            'text': lambda: str(e),
+        })()
+
+
 def parse_events_from_response(content):
-    """Parse events JSON from agent response."""
-    events = []
+    """Parse events JSON from agent/LLM response."""
+    if not content:
+        return []
 
     code_block_match = re.search(r'```json\s*([\s\S]*?)\s*```', content)
     if code_block_match:
@@ -221,8 +298,282 @@ def delete_expired_events():
     return deleted
 
 
-def scrape_source(source):
-    """Scrape a single source using agno agent."""
+def extract_domain(url):
+    """Extract domain from URL."""
+    match = re.search(r'https?://([^/]+)', url)
+    return match.group(1) if match else url
+
+
+def extract_events_llm(content, source):
+    """Use LLM to extract events from raw content."""
+    if not content or len(content) < 50:
+        return []
+
+    today = date.today()
+    today_str = today.strftime('%Y-%m-%d')
+    max_date = today + timedelta(days=MAX_DAYS_AHEAD)
+    max_date_str = max_date.strftime('%Y-%m-%d')
+
+    prompt = f"""Extract ALL free events from the content below collected from {source['url']}.
+
+Return a JSON object with this exact structure:
+{{
+    "source_url": "{source['url']}",
+    "scraped_at": "{today_str}",
+    "date_range": "{today_str} to {max_date_str}",
+    "data": [
+        {{
+            "title": "Event Title",
+            "url": "event URL or empty string",
+            "date": "YYYY-MM-DD format",
+            "time": "HH:MM:SS 24-hour format or null",
+            "location": "Venue name or null",
+            "city": "City name or null",
+            "description": "Brief description or empty string"
+        }}
+    ]
+}}
+
+Rules:
+- Extract ONLY free events
+- Dates MUST be in YYYY-MM-DD format
+- Times MUST be in 24-hour HH:MM:SS format (e.g., '14:30:00' NOT '2:30 PM')
+- Include location and city when available
+- If no events found, return: {{"data": []}}
+- Do NOT include any explanation, ONLY valid JSON
+
+Content to parse (first 15000 chars):
+{content[:15000]}"""
+
+    try:
+        llm_response = call_llm(prompt)
+        events = parse_events_from_response(llm_response)
+        return events
+    except Exception as e:
+        print(f"    [WARN] LLM extraction failed: {e}")
+        return []
+
+
+class BrightDataScraper:
+    """Wrapper for Bright Data scraping with multi-tier fallback."""
+
+    def __init__(self):
+        self.api_key = os.getenv('BRIGHT_DATA_API_TOKEN')
+        self.zone = 'mcp_unlocker'
+
+    def scrape_as_markdown(self, url):
+        """Tier 1: Direct markdown scraping."""
+        print(f"    [Tier 1] scrape_as_markdown: {url}")
+
+        response = fetch(
+            'https://api.brightdata.com/request',
+            method='POST',
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f"Bearer {self.api_key}",
+            },
+            body=json.dumps({
+                'zone': self.zone,
+                'url': url,
+                'format': 'markdown',
+                'country': 'us',
+            }),
+        )
+
+        if response.ok and response.status == 200:
+            content = response.text()
+            print(f"    [Tier 1] Got {len(content)} chars")
+            return content
+
+        print(f"    [Tier 1] Failed: HTTP {response.status}")
+        return None
+
+    def browser_navigate(self, url):
+        """Tier 2: Browser automation scraping."""
+        print(f"    [Tier 2] browser_navigate: {url}")
+
+        response = fetch(
+            'https://api.brightdata.com/request',
+            method='POST',
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f"Bearer {self.api_key}",
+            },
+            body=json.dumps({
+                'zone': self.zone,
+                'url': url,
+                'format': 'raw',
+                'country': 'us',
+                'render': 'browser',
+            }),
+        )
+
+        if response.ok and response.status == 200:
+            content = response.text()
+            print(f"    [Tier 2] Got {len(content)} chars")
+            return content
+
+        print(f"    [Tier 2] Failed: HTTP {response.status}")
+        return None
+
+    def search_engine(self, query, engine='google'):
+        """Tier 3: Search engine fallback."""
+        print(f"    [Tier 3] search_engine: {query}")
+
+        response = fetch(
+            'https://api.brightdata.com/request',
+            method='POST',
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f"Bearer {self.api_key}",
+            },
+            body=json.dumps({
+                'zone': self.zone,
+                'url': f'https://www.google.com/search?q={query}',
+                'format': 'markdown',
+                'country': 'us',
+            }),
+        )
+
+        if response.ok and response.status == 200:
+            content = response.text()
+            print(f"    [Tier 3] Got {len(content)} chars")
+            return content
+
+        print(f"    [Tier 3] Failed: HTTP {response.status}")
+        return None
+
+
+def scrape_source_with_fallback(source):
+    """
+    Multi-tier scraping with fallback logic.
+    Returns dict with events, tier_reached, attempts, error info.
+    """
+    today = date.today()
+    max_date = today + timedelta(days=MAX_DAYS_AHEAD)
+    domain = extract_domain(source['url'])
+
+    scraper = BrightDataScraper()
+
+    tier_info = {
+        'tier_reached': None,
+        'attempts': {'t1': 0, 't2': 0, 't3': 0},
+        'total_attempts': 0,
+        'error': None,
+        'raw_content': None,
+    }
+
+    # Tier 1: scrape_as_markdown
+    for attempt in range(MAX_RETRIES_PER_TIER):
+        tier_info['attempts']['t1'] += 1
+        tier_info['total_attempts'] += 1
+        print(f"  [Tier 1] Attempt {attempt + 1}/{MAX_RETRIES_PER_TIER}")
+
+        content = scraper.scrape_as_markdown(source['url'])
+
+        if content and len(content) > MIN_CONTENT_LENGTH:
+            print(f"    [Tier 1] Content valid ({len(content)} chars)")
+
+            events = extract_events_llm(content, source)
+            if events:
+                tier_info['tier_reached'] = 1
+                return {'events': events, **tier_info}
+
+        if attempt < MAX_RETRIES_PER_TIER - 1:
+            print(f"    [Tier 1] Retrying in {RETRY_DELAY}s...")
+            wait_and_retry()
+
+    # Tier 2: browser_navigate
+    for attempt in range(MAX_RETRIES_PER_TIER):
+        tier_info['attempts']['t2'] += 1
+        tier_info['total_attempts'] += 1
+        print(f"  [Tier 2] Attempt {attempt + 1}/{MAX_RETRIES_PER_TIER}")
+
+        content = scraper.browser_navigate(source['url'])
+
+        if content and len(content) > MIN_CONTENT_LENGTH:
+            print(f"    [Tier 2] Content valid ({len(content)} chars)")
+
+            events = extract_events_llm(content, source)
+            if events:
+                tier_info['tier_reached'] = 2
+                return {'events': events, **tier_info}
+
+        if attempt < MAX_RETRIES_PER_TIER - 1:
+            print(f"    [Tier 2] Retrying in {RETRY_DELAY}s...")
+            wait_and_retry()
+
+    # Tier 3: search_engine
+    for attempt in range(MAX_RETRIES_PER_TIER):
+        tier_info['attempts']['t3'] += 1
+        tier_info['total_attempts'] += 1
+        print(f"  [Tier 3] Attempt {attempt + 1}/{MAX_RETRIES_PER_TIER}")
+
+        search_query = f"site:{domain} events"
+        search_content = scraper.search_engine(search_query)
+
+        if search_content and len(search_content) > MIN_CONTENT_LENGTH:
+            print(f"    [Tier 3] Search results valid ({len(search_content)} chars)")
+            tier_info['raw_content'] = search_content
+
+            events = extract_events_llm(search_content, source)
+            if events:
+                tier_info['tier_reached'] = 3
+                return {'events': events, **tier_info}
+
+        if attempt < MAX_RETRIES_PER_TIER - 1:
+            print(f"    [Tier 3] Retrying in {RETRY_DELAY}s...")
+            wait_and_retry()
+
+    # All tiers exhausted
+    tier_info['tier_reached'] = 'exhausted'
+    tier_info['error'] = f"All tiers failed after {tier_info['total_attempts']} total attempts"
+    print(f"  [ERROR] {tier_info['error']}")
+
+    return {'events': [], **tier_info}
+
+
+def log_debug(source_name, tier_info, prompt, content, events):
+    """Log debug information with tier details."""
+    if not DEBUG_MODE:
+        return
+
+    DEBUG_DIR.mkdir(exist_ok=True)
+    debug_file = DEBUG_DIR / f"scrape_debug_{datetime.now().strftime('%Y%m%d')}.log"
+
+    with open(debug_file, 'a') as f:
+        f.write(f"\n{'='*60}\n")
+        f.write(f"SOURCE: {source_name}\n")
+        f.write(f"TIME: {datetime.now().isoformat()}\n")
+        f.write(f"{'='*60}\n\n")
+
+        f.write(f"--- TIER ATTEMPTS ---\n")
+        f.write(f"Tier 1 (scrape_as_markdown): {tier_info['attempts']['t1']} attempts\n")
+        f.write(f"Tier 2 (browser_navigate): {tier_info['attempts']['t2']} attempts\n")
+        f.write(f"Tier 3 (search_engine): {tier_info['attempts']['t3']} attempts\n")
+        f.write(f"Tier Reached: {tier_info['tier_reached']}\n")
+        f.write(f"Total Attempts: {tier_info['total_attempts']}\n")
+
+        if tier_info['error']:
+            f.write(f"\n--- ERROR ---\n")
+            f.write(f"{tier_info['error']}\n")
+
+        f.write(f"\n--- PROMPT ---\n")
+        f.write(prompt if prompt else "(using tier scraping without agent prompt)")
+
+        f.write(f"\n\n--- RAW CONTENT ({len(str(content)) if content else 0} chars) ---\n")
+        f.write(str(content)[:5000] if content else "No content")
+
+        f.write(f"\n\n--- PARSED EVENTS ({len(events)} found) ---\n")
+        json.dump(events, f, indent=2)
+
+        f.write("\n\n")
+
+    print(f"  [DEBUG] Logs appended to {debug_file}")
+
+
+def scrape_source_agent(source):
+    """Original agent-based scraping for comparison."""
     today = date.today()
     today_str = today.strftime('%Y-%m-%d')
     max_date = today + timedelta(days=MAX_DAYS_AHEAD)
@@ -236,10 +587,10 @@ def scrape_source(source):
         ),
         tools=[
             BrightDataTools(
-                api_key=os.getenv('BRIGHT_DATA_API_KEY'),
+                api_key=os.getenv('BRIGHT_DATA_API_TOKEN'),
                 enable_scrape_markdown=True,
-                enable_screenshot=False,
-                enable_search_engine=False,
+                enable_screenshot=True,
+                enable_search_engine=True,
                 enable_web_data_feed=False,
                 web_unlocker_zone='mcp_unlocker',
             )
@@ -247,50 +598,40 @@ def scrape_source(source):
         debug_mode=False,
     )
 
-    pagination_rules = ""
-    critical_rules = ""
-
-    if not TEST_MODE:
-        critical_rules = """## CRITICAL RULES:
-1. Scrape pages SEQUENTIALLY - do NOT skip any page numbers
-2. Start from page 1 and go to page 2, then 3, then 4, etc.
-3. STOP scraping when ALL events on a page are MORE than {MAX_DAYS_AHEAD} days in the future (after {max_date_str})
-4. Sort all scraped events chronologically by date/time, from today ({today_str}) to latest
+    critical_rules = """## CRITICAL RULES:
+1. Use multi-tool strategy - try multiple approaches if first fails
+2. If scrape_as_markdown returns empty content, try browser_navigate
+3. If browser also fails, use search_engine with query "site:{domain} events"
+4. Extract events from whatever content you get
 5. Today's date is {today_str}
-"""
-        pagination_rules = """## Pagination Pattern to Try:
-- Page 1: {source['url']}
-- Page 2: {source['url']}?page=1 or {source['url']}?page=2 (try both)
-- Continue with ?page=3, ?page=4, etc.
-- If that doesn't work, try /page/2, /events/page/2, etc.
 
-## Steps:
-1. First, scrape page 1 using scrape_as_markdown tool
-2. Determine the pagination pattern (e.g., ?page=1, /page/2, ?p=2, etc.)
-3. Scrape page 2, then page 3, then page 4, etc. - SEQUENTIALLY, no skipping
-4. After scraping each page, check the dates of all events on that page
-5. If ALL events on a page are AFTER {max_date_str}, STOP immediately - do not scrape more pages
-6. Combine all events from all scraped pages
-7. Sort by date/time chronologically
+## Error Reporting:
+If all methods fail, return:
+{{
+    "source_url": "{url}",
+    "data": [],
+    "error": "EXPLANATION of what failed"
+}}
 """
-    else:
+
+    if TEST_MODE:
         critical_rules = """## CRITICAL RULES (Test Mode):
 1. ONLY scrape page 1 - do not scrape any additional pages
-2. Return events from that single page only
+2. Try multiple approaches: scrape_as_markdown first, then browser, then search
 3. Today's date is {today_str}
-"""
-        pagination_rules = """## Test Mode: Only scrape page 1
-1. Scrape page 1 using scrape_as_markdown tool
-2. Return events from that single page only
+
+## Error Reporting:
+If all methods fail, return:
+{{
+    "source_url": "{url}",
+    "data": [],
+    "error": "EXPLANATION"
+}}
 """
 
-    prompt = f"""You are a web scraping agent. Your task is to scrape data from: {source['url']}
+    prompt = f"""You are a web scraping agent. Your task is to scrape free events from: {source['url']}
 
 {critical_rules}
-{pagination_rules}
-
-## Tool Usage:
-Use scrape_as_markdown tool to scrape each page. This tool scrapes URLs directly and returns content as markdown.
 
 ## Output Format:
 Return a JSON object with:
@@ -302,26 +643,36 @@ Return a JSON object with:
         {{
             "title": "...",
             "url": "...",
-            "date": "...",
-            "time": "...",
+            "date": "YYYY-MM-DD",
+            "time": "HH:MM:SS or null",
             "location": "...",
             "city": "...",
-            "description": "...",
-            ...other relevant fields...
+            "description": "..."
         }}
     ]
 }}
 
-The data array should be SORTED chronologically from today to the latest event within {MAX_DAYS_AHEAD} days.
-
-Now scrape {source['url']}{" page by page, following all rules above." if not TEST_MODE else " - ONLY scrape page 1, do not scrape additional pages."}"""
+Now scrape {source['url']}{" page by page." if not TEST_MODE else " - ONLY scrape page 1."}"""
 
     try:
         response = agent.run(prompt)
         content = str(response.content)
 
+        if DEBUG_MODE:
+            print(f"  [DEBUG] Agent response: {len(content)} chars")
+
         events = parse_events_from_response(content)
         filtered = filter_events_by_date_range(events, today, max_date)
+
+        tier_info = {
+            'tier_reached': 'agent',
+            'attempts': {'t1': 1, 't2': 0, 't3': 0},
+            'total_attempts': 1,
+            'error': None,
+            'raw_content': content,
+        }
+
+        log_debug(source['name'], tier_info, prompt, content, filtered)
 
         return filtered
     except Exception as e:
@@ -332,6 +683,7 @@ Now scrape {source['url']}{" page by page, following all rules above." if not TE
 def main():
     print(f"Starting scrape at {datetime.now().isoformat()}")
     print(f"Sources to scrape: {len(SOURCES)}")
+    print(f"Test mode: {TEST_MODE}, Debug mode: {DEBUG_MODE}")
 
     if not os.getenv('DATABASE_URL'):
         print("ERROR: DATABASE_URL not set")
@@ -350,12 +702,30 @@ def main():
 
     for source in SOURCES:
         print(f"\n=== Scraping: {source['name']} ===")
+        print(f"    URL: {source['url']}")
 
         try:
-            events = scrape_source(source)
+            # Try agent-based scraping first
+            events = scrape_source_agent(source)
+
+            if len(events) == 0:
+                print(f"    [INFO] Agent returned 0 events, trying tier fallback...")
+                result = scrape_source_with_fallback(source)
+                events = result['events']
+
+                tier_info = {
+                    'tier_reached': result['tier_reached'],
+                    'attempts': result['attempts'],
+                    'total_attempts': result['total_attempts'],
+                    'error': result['error'],
+                    'raw_content': result.get('raw_content'),
+                }
+                log_debug(source['name'], tier_info, None, result.get('raw_content'), events)
+
             count = upsert_events(events, source['name'])
             print(f"  -> {count} events saved from {source['name']}")
             total_events += count
+
         except Exception as e:
             error_msg = f"{source['name']}: {e}"
             errors.append(error_msg)
