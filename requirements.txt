@@ -1,0 +1,4 @@
+agno
+brightdata-mcp
+python-dotenv
+psycopg2-binary

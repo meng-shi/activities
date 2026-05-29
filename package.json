@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "scrape": "tsx scripts/scrape.ts"
+    "scrape": "python3 scripts/scrape.py"
   },
   "dependencies": {
     "@brightdata/mcp": "^2.9.5",
