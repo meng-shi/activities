@@ -29,39 +29,47 @@ function buildPlanningPrompt(
     })
     .join('\n\n');
 
-  return `You are an event planning assistant for the SF Bay Area.
+  return `You are a local event planning assistant helping users plan their day in the SF Bay Area.
 
-USER REQUEST:
+USER CONSTRAINTS:
 - Date: ${input.date}
-- Time window: ${input.startTime} to ${input.endTime}
-- Location: ${input.location}
+- Time range: ${input.startTime} to ${input.endTime}
+- Location preference: ${input.location}
 - Interests: ${input.interests.join(', ') || 'general'}
 
 AVAILABLE EVENTS FROM DATABASE:
 ${eventsContext}
 
-RULES:
-- Only pick events from the list above. Never invent events.
-- Every event MUST happen on ${input.date}. If it doesn't match the date, skip it.
-- Every event MUST start within ${input.startTime} to ${input.endTime}. If it's outside the time window, skip it.
-- If no events fit, use a filler like "Explore the neighborhood" or "Take a break".
-- Include at least 30 min buffer between events if locations differ.
-- Return ONLY valid JSON, no markdown.
+TASK:
+Create a personalized day plan selecting events that:
+1. Match the user's interests
+2. Fit within the time window (${input.startTime} to ${input.endTime})
+3. Are geographically coherent (group nearby locations)
+4. Include a mix of activity types if possible
 
-OUTPUT:
+IMPORTANT RULES:
+- Only include events that actually exist in the list above
+- Do not invent or guess event names
+- Respect the time constraints - do not schedule events outside the time window
+- Include reasonable buffer time between activities (at least 30 mins if locations change)
+- If events are sparse, fill gaps with general suggestions like "Explore the neighborhood" or "Take a break"
+
+OUTPUT FORMAT (JSON only, no markdown):
 {
   "activities": [
     {
       "time": "10:00",
-      "title": "Event name",
+      "title": "Event name from database",
       "location": "Location name",
       "city": "City",
       "description": "Brief description",
-      "reason": "Why this fits"
+      "reason": "Why this fits the user's interests"
     }
   ],
-  "summary": "1-2 sentence summary"
-}`;
+  "summary": "A brief 1-2 sentence summary of the planned day"
+}
+
+Return ONLY valid JSON, no additional text.`;
 }
 
 function parseAIPlan(aiContent: string, events: Event[]): DayPlan {
