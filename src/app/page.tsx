@@ -1,16 +1,47 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Event, PaginatedResponse } from '@/lib/types';
+import { Event } from '@/lib/types';
 import EventList from '@/components/EventList';
-import FilterPanel, { FilterState } from '@/components/FilterPanel';
-import FloatingChatButton from '@/components/FloatingChatButton';
 import PlanMyDay from '@/components/PlanMyDay';
 
-interface EventsJson {
-  events: Event[];
-  generated: string;
+interface FilterState {
+  county?: string;
+  category?: string;
+  date?: string;
+  search?: string;
 }
+
+const CATEGORIES = [
+  { id: 'outdoors', label: 'Outdoor', icon: '🌲' },
+  { id: 'music', label: 'Music', icon: '🎵' },
+  { id: 'arts', label: 'Arts & Culture', icon: '🎨' },
+  { id: 'sports', label: 'Sports', icon: '⚽' },
+  { id: 'library', label: 'Library', icon: '📚' },
+  { id: 'community', label: 'Community', icon: '👥' },
+  { id: 'family', label: 'Family', icon: '👨‍👩‍👧' },
+  { id: 'food', label: 'Food & Drink', icon: '🍕' },
+  { id: 'education', label: 'Education', icon: '🎓' },
+  { id: 'health', label: 'Health', icon: '🧘' },
+];
+
+const COUNTIES = [
+  { id: 'san_francisco', label: 'SF', icon: '🏙️' },
+  { id: 'alameda', label: 'Alameda', icon: '🌉' },
+  { id: 'santa_clara', label: 'Santa Clara', icon: '💻' },
+  { id: 'san_mateo', label: 'San Mateo', icon: '🌊' },
+  { id: 'contra_costa', label: 'Contra Costa', icon: '⛰️' },
+  { id: 'marin', label: 'Marin', icon: '🌲' },
+  { id: 'sonoma', label: 'Sonoma', icon: '🍷' },
+  { id: 'napa', label: 'Napa', icon: '🍇' },
+  { id: 'solano', label: 'Solano', icon: '✈️' },
+];
+
+const DATE_OPTIONS = [
+  { id: 'today', label: 'Today' },
+  { id: 'weekend', label: 'This Weekend' },
+  { id: 'week', label: 'Next 7 Days' },
+];
 
 export default function Home() {
   const [allEvents, setAllEvents] = useState<Event[]>([]);
@@ -18,15 +49,14 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterState>({});
   const [currentPage, setCurrentPage] = useState(1);
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetch('/events.json')
       .then(res => res.json())
-      .then((data: EventsJson) => {
+      .then((data: { events: Event[] }) => {
         setAllEvents(data.events);
         setFilteredEvents(data.events);
-        setPagination(prev => ({ ...prev, total: data.events.length, pages: Math.ceil(data.events.length / 20) }));
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -45,8 +75,8 @@ export default function Home() {
       filtered = filtered.filter(e => e.category === filters.category);
     }
 
-    if (filters.search) {
-      const search = filters.search.toLowerCase();
+    if (searchQuery) {
+      const search = searchQuery.toLowerCase();
       filtered = filtered.filter(e =>
         e.title.toLowerCase().includes(search) ||
         (e.description && e.description.toLowerCase().includes(search))
@@ -81,17 +111,26 @@ export default function Home() {
       }
     }
 
-    setPagination(prev => ({
-      ...prev,
-      total: filtered.length,
-      pages: Math.ceil(filtered.length / 20)
-    }));
     setCurrentPage(1);
     setFilteredEvents(filtered);
-  }, [filters, allEvents]);
+  }, [filters, searchQuery, allEvents]);
 
-  const handleFilterChange = (newFilters: FilterState) => {
-    setFilters(newFilters);
+  const handleFilterClick = (type: 'county' | 'category' | 'date', id: string) => {
+    const key = type === 'county' ? 'county' : type === 'category' ? 'category' : 'date';
+    if (filters[key] === id) {
+      setFilters(prev => {
+        const newFilters = { ...prev };
+        delete newFilters[key];
+        return newFilters;
+      });
+    } else {
+      setFilters(prev => ({ ...prev, [key]: id }));
+    }
+  };
+
+  const clearAllFilters = () => {
+    setFilters({});
+    setSearchQuery('');
   };
 
   const handlePageChange = (newPage: number) => {
@@ -104,62 +143,178 @@ export default function Home() {
     return filteredEvents.slice(start, end);
   };
 
+  const pages = Math.ceil(filteredEvents.length / 20);
+  const hasActiveFilters = Object.keys(filters).length > 0;
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-gray-900">
-            SF Bay Area Free Events
-          </h1>
-          <p className="mt-1 text-gray-500">
-            Discover free activities across all 9 Bay Area counties
-          </p>
+      <header className="bg-gray-50 text-orange-500">
+        <div className="max-w-6xl mx-auto px-4 pt-8 pb-6">
+          <div className="text-center mb-6">
+            <h1 className="text-4xl md:text-5xl font-bold mb-3 font-[var(--font-pacifico)]">
+              Activities Near Me
+            </h1>
+            <p className="text-xl text-orange-500/70">
+              Find amazing activities across the SF Bay Area
+            </p>
+          </div>
+
+          
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <section className="max-w-6xl mx-auto px-4 py-6">
         <PlanMyDay />
+      </section>
 
-        <div className="flex flex-col lg:flex-row gap-6">
-          <aside className="lg:w-64 flex-shrink-0">
-            <FilterPanel onFilterChange={handleFilterChange} />
-          </aside>
+      <section className="max-w-6xl mx-auto px-4 py-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Browse</h2>
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              className="text-xs text-[#FF5833] hover:text-[#E54530] font-medium"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
 
-          <div className="flex-1">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-gray-500">
-                {loading ? 'Loading...' : `${filteredEvents.length} events found`}
-              </p>
-            </div>
-
-            <EventList events={getPageEvents()} loading={loading} />
-
-            {pagination.pages > 1 && (
-              <div className="flex items-center justify-center gap-2 mt-6">
-                <button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage <= 1}
-                  className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50"
-                >
-                  Previous
-                </button>
-                <span className="px-4 py-2">
-                  Page {currentPage} of {pagination.pages}
-                </span>
-                <button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage >= pagination.pages}
-                  className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50"
-                >
-                  Next
-                </button>
-              </div>
-            )}
+        <div className="mb-4">
+          <p className="text-xs text-gray-400 mb-2">County</p>
+          <div className="flex flex-wrap gap-2">
+            {COUNTIES.map(county => (
+              <button
+                key={county.id}
+                onClick={() => handleFilterClick('county', county.id)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium flex items-center gap-1.5 transition-all ${
+                  filters.county === county.id
+                    ? 'bg-[#FF5833] text-white shadow-md'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-[#FF5833]'
+                }`}
+              >
+                <span>{county.icon}</span>
+                <span>{county.label}</span>
+              </button>
+            ))}
           </div>
         </div>
+
+        <div className="mb-4">
+          <p className="text-xs text-gray-400 mb-2">Category</p>
+          <div className="flex flex-wrap gap-2">
+            {CATEGORIES.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => handleFilterClick('category', cat.id)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium flex items-center gap-1.5 transition-all ${
+                  filters.category === cat.id
+                    ? 'bg-[#FF5833] text-white shadow-md'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-[#FF5833]'
+                }`}
+              >
+                <span>{cat.icon}</span>
+                <span>{cat.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs text-gray-400 mb-2">When</p>
+          <div className="flex flex-wrap gap-2">
+            {DATE_OPTIONS.map(date => (
+              <button
+                key={date.id}
+                onClick={() => handleFilterClick('date', date.id)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  filters.date === date.id
+                    ? 'bg-[#FF5833] text-white shadow-md'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-[#FF5833]'
+                }`}
+              >
+                {date.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <main className="max-w-6xl mx-auto px-4 py-6">
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-gray-600">
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-[#FF5833] rounded-full pulse-dot"></span>
+                Loading events...
+              </span>
+            ) : (
+              <span>
+                <strong className="text-[#FF5833] font-bold">{filteredEvents.length}</strong> free events found
+              </span>
+            )}
+          </p>
+        </div>
+
+        <EventList events={getPageEvents()} loading={loading} />
+
+        {pages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-8">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage <= 1}
+              className="px-5 py-2 border border-gray-300 rounded-full disabled:opacity-40 hover:bg-gray-50 transition-colors text-gray-700 font-medium"
+            >
+              ← Previous
+            </button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, pages) }, (_, i) => {
+                let pageNum;
+                if (pages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= pages - 2) {
+                  pageNum = pages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`w-10 h-10 rounded-full transition-colors font-medium ${
+                      currentPage === pageNum
+                        ? 'bg-[#FF5833] text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage >= pages}
+              className="px-5 py-2 border border-gray-300 rounded-full disabled:opacity-40 hover:bg-gray-50 transition-colors text-gray-700 font-medium"
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </main>
 
-      <FloatingChatButton />
+      <footer className="bg-gradient-to-r from-[#FF5833] to-[#FF8A50] text-white py-8 mt-12">
+        <div className="max-w-6xl mx-auto px-4 text-center">
+          <p className="font-medium">
+            SF Bay Area Events ✨
+          </p>
+          <p className="text-sm text-white/80 mt-2">
+            Discover activities across all 9 Bay Area counties
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }

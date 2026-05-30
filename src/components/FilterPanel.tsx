@@ -1,19 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import { COUNTIES, COUNTY_LABELS, CATEGORIES, CATEGORY_LABELS } from '@/lib/types';
-import { County, Category } from '@/lib/types';
+import { COUNTIES, COUNTY_LABELS } from '@/lib/types';
 
-interface FilterPanelProps {
-  onFilterChange: (filters: FilterState) => void;
-}
-
-export interface FilterState {
+interface FilterState {
   county?: string;
   category?: string;
   date?: string;
   search?: string;
 }
+
+interface FilterPanelProps {
+  onFilterChange: (filters: FilterState) => void;
+}
+
+const DATE_OPTIONS = [
+  { value: '', label: 'Any Date' },
+  { value: 'today', label: 'Today' },
+  { value: 'weekend', label: 'This Weekend' },
+  { value: 'week', label: 'Next 7 Days' },
+];
 
 export default function FilterPanel({ onFilterChange }: FilterPanelProps) {
   const [filters, setFilters] = useState<FilterState>({});
@@ -33,41 +39,20 @@ export default function FilterPanel({ onFilterChange }: FilterPanelProps) {
   const hasFilters = Object.keys(filters).length > 0;
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold text-lg">Filters</h2>
-        {hasFilters && (
-          <button
-            onClick={clearFilters}
-            className="text-sm text-blue-500 hover:text-blue-700"
-          >
-            Clear all
-          </button>
-        )}
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+        <h2 className="font-semibold text-gray-800">Filters</h2>
       </div>
 
-      <div className="space-y-4">
+      <div className="p-4 space-y-5">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Search
-          </label>
-          <input
-            type="text"
-            placeholder="Search events..."
-            value={filters.search || ''}
-            onChange={(e) => updateFilter('search', e.target.value || undefined)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
             County
           </label>
           <select
             value={filters.county || ''}
             onChange={(e) => updateFilter('county', e.target.value || undefined)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#FF5833] focus:border-transparent text-gray-700"
           >
             <option value="">All Counties</option>
             {COUNTIES.map((county) => (
@@ -79,38 +64,36 @@ export default function FilterPanel({ onFilterChange }: FilterPanelProps) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Category
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            When
           </label>
-          <select
-            value={filters.category || ''}
-            onChange={(e) => updateFilter('category', e.target.value || undefined)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Categories</option>
-            {CATEGORIES.map((category) => (
-              <option key={category} value={category}>
-                {CATEGORY_LABELS[category]}
-              </option>
+          <div className="space-y-2">
+            {DATE_OPTIONS.map(option => (
+              <label key={option.value} className="flex items-center gap-3 cursor-pointer group">
+                <input
+                  type="radio"
+                  name="date"
+                  value={option.value}
+                  checked={filters.date === option.value || (!filters.date && option.value === '')}
+                  onChange={(e) => updateFilter('date', e.target.value || undefined)}
+                  className="w-4 h-4 text-[#FF5833] border-gray-300 focus:ring-[#FF5833]"
+                />
+                <span className="text-sm text-gray-600 group-hover:text-gray-900">
+                  {option.label}
+                </span>
+              </label>
             ))}
-          </select>
+          </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Date
-          </label>
-          <select
-            value={filters.date || ''}
-            onChange={(e) => updateFilter('date', e.target.value || undefined)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        {hasFilters && (
+          <button
+            onClick={clearFilters}
+            className="w-full py-2.5 text-sm text-[#FF5833] hover:text-[#E54530] font-medium border border-[#FF5833] rounded-lg hover:bg-orange-50 transition-colors"
           >
-            <option value="">Any Date</option>
-            <option value="today">Today</option>
-            <option value="weekend">This Weekend</option>
-            <option value="week">This Week</option>
-          </select>
-        </div>
+            Clear Filters
+          </button>
+        )}
       </div>
     </div>
   );

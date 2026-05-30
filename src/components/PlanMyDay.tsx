@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { DayPlan, PlannedActivity } from '@/lib/types';
+import { DayPlan } from '@/lib/types';
 
 interface PlanMyDayProps {
   onPlanGenerated?: (plan: DayPlan) => void;
@@ -77,10 +77,10 @@ export default function PlanMyDay({ onPlanGenerated }: PlanMyDayProps) {
 
   return (
     <div className="mb-8">
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-6 shadow-lg">
+      <div className="bg-gradient-to-r from-[#FF5833] to-[#FF8A50] rounded-2xl p-6 shadow-lg">
         <div className="text-white mb-4">
-          <h2 className="text-2xl font-bold">Plan My Day</h2>
-          <p className="text-blue-100 text-sm">Tell me how you want to spend your day</p>
+          <h2 className="text-2xl font-bold">Plan My Day ✨</h2>
+          <p className="text-white/90 text-sm">Tell me how you want to spend your day and I&apos;ll create an itinerary</p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex gap-3">
@@ -89,12 +89,12 @@ export default function PlanMyDay({ onPlanGenerated }: PlanMyDayProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder='e.g., "Plan a family day in Oakland from 10am to 6pm"'
-            className="flex-1 px-4 py-3 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            className="flex-1 px-4 py-3 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white/50"
           />
           <button
             type="submit"
             disabled={planState === 'loading' || !query.trim()}
-            className="px-6 py-3 bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-3 bg-white hover:bg-gray-100 text-[#FF5833] font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {planState === 'loading' ? (
               <span className="flex items-center gap-2">
@@ -110,13 +110,13 @@ export default function PlanMyDay({ onPlanGenerated }: PlanMyDayProps) {
           </button>
         </form>
 
-        <div className="mt-3 text-blue-100 text-xs">
-          <p>Try: "Family day in Oakland" • "Music events in SF from 2pm to 10pm" • "Kids activities in San Jose"</p>
+        <div className="mt-3 text-white/80 text-xs">
+          <p>Try: &quot;Family day in Oakland&quot; • &quot;Music events in SF from 2pm to 10pm&quot; • &quot;Kids activities in San Jose&quot;</p>
         </div>
       </div>
 
       {planState === 'error' && error && (
-        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
           <p className="text-red-700">{error}</p>
           <button
             onClick={handleReset}
@@ -134,21 +134,21 @@ export default function PlanMyDay({ onPlanGenerated }: PlanMyDayProps) {
               <p className="text-gray-600 mb-3">{plan.summary}</p>
               <button
                 onClick={handleReset}
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                className="text-[#FF5833] hover:text-[#E54530] text-sm font-medium"
               >
                 Try a different search
               </button>
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="p-4 bg-gradient-to-r from-[#FF5833]/10 to-[#FF8A50]/10 border-b border-gray-100 flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900">Your Day Plan</h3>
-                  <p className="text-sm text-gray-500">{plan.summary}</p>
+                  <h3 className="font-semibold text-gray-900">Your Day Plan for {plan.location || 'the Bay Area'}</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{plan.summary}</p>
                 </div>
                 <button
                   onClick={handleReset}
-                  className="px-4 py-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  className="px-4 py-2 text-sm text-[#FF5833] hover:text-[#E54530] font-medium"
                 >
                   Start Over
                 </button>
@@ -159,46 +159,43 @@ export default function PlanMyDay({ onPlanGenerated }: PlanMyDayProps) {
                   <div key={index} className="p-4 hover:bg-gray-50 transition-colors">
                     <div className="flex gap-4">
                       <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
+                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#FF5833] to-[#FF8A50] flex items-center justify-center text-white font-bold text-sm shadow-md">
                           {formatTime(activity.time)}
                         </div>
                         {index < plan.activities.length - 1 && (
-                          <div className="w-0.5 h-full bg-blue-200 my-1" />
+                          <div className="w-1 h-full bg-gradient-to-b from-[#FF5833] to-[#FF8A50] my-1 rounded" />
                         )}
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-gray-900">{activity.title}</h4>
-                        <p className="text-sm text-gray-500 mt-0.5">
+                        <h4 className="font-semibold text-gray-900">{activity.title}</h4>
+                        <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1">
+                          <span>📍</span>
                           {activity.location} {activity.city && `• ${activity.city}`}
                         </p>
                         {activity.description && (
-                          <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                          <p className="text-sm text-gray-600 mt-2 line-clamp-2">
                             {activity.description}
                           </p>
                         )}
                         <button
                           onClick={() => toggleReason(index)}
-                          className="mt-2 text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                          className="mt-2 text-xs text-[#FF5833] hover:text-[#E54530] flex items-center gap-1 font-medium"
                         >
                           {expandedReasons.has(index) ? (
                             <>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                              </svg>
+                              <span>▲</span>
                               Hide reasoning
                             </>
                           ) : (
                             <>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
+                              <span>💡</span>
                               Why this activity?
                             </>
                           )}
                         </button>
                         {expandedReasons.has(index) && (
-                          <p className="mt-2 text-xs text-gray-500 bg-blue-50 p-2 rounded">
+                          <p className="mt-2 text-xs text-gray-600 bg-orange-50 p-3 rounded-lg border border-orange-100">
                             {activity.reason}
                           </p>
                         )}
