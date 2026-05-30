@@ -103,6 +103,7 @@ function parseAIPlan(aiContent: string, events: Event[]): DayPlan {
         description: act.description || '',
         reason: act.reason || '',
         sourceUrl: matchedEvent?.source_url,
+        event: matchedEvent,
       };
     });
 
@@ -149,6 +150,7 @@ function createFallbackPlan(events: Event[], input: DayPlanInput): DayPlan {
     description: e.description || '',
     reason: `Matches ${input.interests.join(', ') || 'user interests'}`,
     sourceUrl: e.source_url,
+    event: e,
   }));
 
   return {

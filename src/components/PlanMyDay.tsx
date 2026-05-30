@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { DayPlan } from '@/lib/types';
+import { DayPlan, Event } from '@/lib/types';
+import EventModal from './EventModal';
 
 interface PlanMyDayProps {
   onPlanGenerated?: (plan: DayPlan) => void;
@@ -15,6 +16,7 @@ export default function PlanMyDay({ onPlanGenerated }: PlanMyDayProps) {
   const [plan, setPlan] = useState<DayPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedReasons, setExpandedReasons] = useState<Set<number>>(new Set());
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +56,16 @@ export default function PlanMyDay({ onPlanGenerated }: PlanMyDayProps) {
     setError(null);
     setPlanState('idle');
     setExpandedReasons(new Set());
+  };
+
+  const handleActivityClick = (activity: DayPlan['activities'][0]) => {
+    if (activity.event) {
+      setSelectedEvent(activity.event);
+    }
+  };
+
+  const closeEventModal = () => {
+    setSelectedEvent(null);
   };
 
   const toggleReason = (index: number) => {
@@ -156,51 +168,105 @@ export default function PlanMyDay({ onPlanGenerated }: PlanMyDayProps) {
 
               <div className="divide-y divide-gray-100">
                 {plan.activities.map((activity, index) => (
-                  <div key={index} className="p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex gap-4">
-                      <div className="flex flex-col items-center">
-                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#FF5833] to-[#FF8A50] flex items-center justify-center text-white font-bold text-sm shadow-md">
-                          {formatTime(activity.time)}
-                        </div>
-                        {index < plan.activities.length - 1 && (
-                          <div className="w-1 h-full bg-gradient-to-b from-[#FF5833] to-[#FF8A50] my-1 rounded" />
-                        )}
-                      </div>
+                  <div key={index} className={activity.event ? 'hover:bg-orange-50 transition-colors cursor-pointer' : ''}>
+                    {activity.event ? (
+                      <div onClick={() => handleActivityClick(activity)} className="p-4">
+                        <div className="flex gap-4">
+                          <div className="flex flex-col items-center">
+                            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#FF5833] to-[#FF8A50] flex items-center justify-center text-white font-bold text-sm shadow-md">
+                              {formatTime(activity.time)}
+                            </div>
+                            {index < plan.activities.length - 1 && (
+                              <div className="w-1 h-full bg-gradient-to-b from-[#FF5833] to-[#FF8A50] my-1 rounded" />
+                            )}
+                          </div>
 
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-gray-900">{activity.title}</h4>
-                        <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1">
-                          <span>📍</span>
-                          {activity.location} {activity.city && `• ${activity.city}`}
-                        </p>
-                        {activity.description && (
-                          <p className="text-sm text-gray-600 mt-2 line-clamp-2">
-                            {activity.description}
-                          </p>
-                        )}
-                        <button
-                          onClick={() => toggleReason(index)}
-                          className="mt-2 text-xs text-[#FF5833] hover:text-[#E54530] flex items-center gap-1 font-medium"
-                        >
-                          {expandedReasons.has(index) ? (
-                            <>
-                              <span>▲</span>
-                              Hide reasoning
-                            </>
-                          ) : (
-                            <>
-                              <span>💡</span>
-                              Why this activity?
-                            </>
-                          )}
-                        </button>
-                        {expandedReasons.has(index) && (
-                          <p className="mt-2 text-xs text-gray-600 bg-orange-50 p-3 rounded-lg border border-orange-100">
-                            {activity.reason}
-                          </p>
-                        )}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-gray-900">{activity.title}</h4>
+                            <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1">
+                              <span>📍</span>
+                              {activity.location} {activity.city && `• ${activity.city}`}
+                            </p>
+                            {activity.description && (
+                              <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                                {activity.description}
+                              </p>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleReason(index);
+                              }}
+                              className="mt-2 text-xs text-[#FF5833] hover:text-[#E54530] flex items-center gap-1 font-medium"
+                            >
+                              {expandedReasons.has(index) ? (
+                                <>
+                                  <span>▲</span>
+                                  Hide reasoning
+                                </>
+                              ) : (
+                                <>
+                                  <span>💡</span>
+                                  Why this activity?
+                                </>
+                              )}
+                            </button>
+                            {expandedReasons.has(index) && (
+                              <p className="mt-2 text-xs text-gray-600 bg-orange-50 p-3 rounded-lg border border-orange-100">
+                                {activity.reason}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="p-4">
+                        <div className="flex gap-4">
+                          <div className="flex flex-col items-center">
+                            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#FF5833] to-[#FF8A50] flex items-center justify-center text-white font-bold text-sm shadow-md">
+                              {formatTime(activity.time)}
+                            </div>
+                            {index < plan.activities.length - 1 && (
+                              <div className="w-1 h-full bg-gradient-to-b from-[#FF5833] to-[#FF8A50] my-1 rounded" />
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-gray-900">{activity.title}</h4>
+                            <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1">
+                              <span>📍</span>
+                              {activity.location} {activity.city && `• ${activity.city}`}
+                            </p>
+                            {activity.description && (
+                              <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                                {activity.description}
+                              </p>
+                            )}
+                            <button
+                              onClick={() => toggleReason(index)}
+                              className="mt-2 text-xs text-[#FF5833] hover:text-[#E54530] flex items-center gap-1 font-medium"
+                            >
+                              {expandedReasons.has(index) ? (
+                                <>
+                                  <span>▲</span>
+                                  Hide reasoning
+                                </>
+                              ) : (
+                                <>
+                                  <span>💡</span>
+                                  Why this activity?
+                                </>
+                              )}
+                            </button>
+                            {expandedReasons.has(index) && (
+                              <p className="mt-2 text-xs text-gray-600 bg-orange-50 p-3 rounded-lg border border-orange-100">
+                                {activity.reason}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -208,6 +274,8 @@ export default function PlanMyDay({ onPlanGenerated }: PlanMyDayProps) {
           )}
         </div>
       )}
+
+      <EventModal event={selectedEvent} onClose={closeEventModal} />
     </div>
   );
 }

@@ -166,6 +166,7 @@ export interface PlannedActivity {
   description: string;
   reason: string;
   sourceUrl?: string;
+  event?: Event;
 }
 
 export interface DayPlan {
