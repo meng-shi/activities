@@ -670,7 +670,7 @@ Return a JSON object with:
     "data": [
         {{
             "title": "...",
-            "url": "...",
+            "url": "REQUIRED - URL to individual event page. If not found, use {source['url']}?event={{title_hash}}",
             "date": "YYYY-MM-DD",
             "time": "HH:MM:SS or null",
             "location": "...",
