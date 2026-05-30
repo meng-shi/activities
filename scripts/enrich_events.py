@@ -132,14 +132,28 @@ def main():
         enrichment = enrich_event(event)
 
         event_detail = enrichment.get('event_detail')
+        city = enrichment.get('city')
+        county = enrichment.get('county')
+        items = enrichment.get('items', [])
+
         if event_detail:
             if DRY_RUN:
                 print(f"    [DRY RUN] Would set event_detail:")
                 print(f"      {event_detail[:100]}...")
+                if city:
+                    print(f"    [DRY RUN] Would set city: {city}")
+                if county:
+                    print(f"    [DRY RUN] Would set county: {county}")
+                if items:
+                    print(f"    [DRY RUN] Would set items: {[i['name'] for i in items]}")
                 success_count += 1
             else:
                 update_event_in_db(event['id'], enrichment)
                 print(f"    [OK] event_detail: {event_detail[:50]}...")
+                if city:
+                    print(f"    [OK] city: {city}, county: {county}")
+                if items:
+                    print(f"    [OK] items: {[i['name'] for i in items]}")
                 success_count += 1
         else:
             print(f"    [SKIP] No enrichment data found")
