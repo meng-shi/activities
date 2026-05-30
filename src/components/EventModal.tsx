@@ -83,6 +83,13 @@ export default function EventModal({ event, onClose }: EventModalProps) {
             </div>
           )}
 
+          {event.event_detail && (
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Event Summary</h3>
+              <p className="text-gray-700">{event.event_detail}</p>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2 mb-6">
             {event.county && (
               <span className="px-3 py-1 bg-blue-50 text-blue-600 text-sm rounded-full">

@@ -2,6 +2,7 @@ export interface Event {
   id: string;
   title: string;
   description: string | null;
+  event_detail: string | null;
   date: string;
   end_date: string | null;
   time: string | null;
