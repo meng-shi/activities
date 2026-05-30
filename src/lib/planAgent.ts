@@ -22,10 +22,12 @@ function buildPlanningPrompt(
 ): string {
   const eventsContext = events
     .map(e => {
-      const desc = e.description?.slice(0, 150) || 'No description';
-      return `[${e.time || 'TBD'}] ${e.title} - ${e.city || e.county}, ${e.location || 'TBA'}. ${desc}`;
+      const desc = e.description || 'No description';
+      const detail = e.event_detail && e.event_detail.length > 20 ? `\nDetails: ${e.event_detail}` : '';
+      const addr = e.full_address || e.address || '';
+      return `[${e.time || 'TBD'}] ${e.title} (${e.category || 'general'})\n  Location: ${e.location || 'TBA'}, ${e.city || e.county}${addr ? ` - ${addr}` : ''}\n  ${desc}${detail}`;
     })
-    .join('\n');
+    .join('\n\n');
 
   return `You are a local event planning assistant helping users plan their day in the SF Bay Area.
 
@@ -144,7 +146,7 @@ function createFallbackPlan(events: Event[], input: DayPlanInput): DayPlan {
     title: e.title,
     location: e.location || 'TBD',
     city: e.city || e.county || 'TBD',
-    description: e.description?.slice(0, 150) || '',
+    description: e.description || '',
     reason: `Matches ${input.interests.join(', ') || 'user interests'}`,
     sourceUrl: e.source_url,
   }));

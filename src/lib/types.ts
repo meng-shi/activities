@@ -8,6 +8,7 @@ export interface Event {
   time: string | null;
   location: string | null;
   address: string | null;
+  full_address: string | null;
   city: string | null;
   county: string;
   latitude: number | null;
