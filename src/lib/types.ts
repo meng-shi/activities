@@ -17,9 +17,15 @@ export interface Event {
   category: string | null;
   source_url: string;
   source_name: string;
+  items: Item[] | null;
   created_at: string;
   updated_at: string;
   last_scraped_at: string;
+}
+
+export interface Item {
+  name: string;
+  link: string;
 }
 
 export interface EventSource {

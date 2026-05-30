@@ -103,6 +103,36 @@ export default function EventModal({ event, onClose }: EventModalProps) {
             </div>
           )}
 
+          {event.event_detail && (
+            <div className="mb-6 p-4 bg-orange-50 rounded-xl border border-orange-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">✨ Event Summary</h3>
+              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {event.event_detail}
+              </p>
+            </div>
+          )}
+
+          {event.items && event.items.length > 0 && (
+            <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">🎒 Recommended Items to Bring</h3>
+              <ul className="space-y-2">
+                {event.items.map((item, index) => (
+                  <li key={index} className="flex items-center justify-between">
+                    <span className="text-gray-700">{item.name}</span>
+                    <a
+                      href={item.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-2 px-3 py-1 bg-white hover:bg-blue-100 text-blue-600 text-sm font-medium rounded-full border border-blue-200 transition-colors"
+                    >
+                      Find on Amazon →
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2 mb-6">
             <span className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-full flex items-center gap-1">
               {CATEGORY_EMOJI[event.category || 'community']} {CATEGORY_LABELS[event.category as keyof typeof CATEGORY_LABELS] || event.category}
