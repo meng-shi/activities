@@ -148,18 +148,22 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-gray-50 text-orange-500">
-        <div className="max-w-6xl mx-auto px-4 pt-8 pb-6">
-          <div className="text-center mb-6">
-            <h1 className="text-4xl md:text-5xl font-bold mb-3 font-[var(--font-pacifico)]">
-              Activities Near Me
-            </h1>
-            <p className="text-xl text-orange-500/70">
-              Find amazing activities across the SF Bay Area
-            </p>
+      <header className="bg-gray-50 text-orange-500 py-8 md:py-12">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="flex items-center justify-center gap-6 md:gap-8 flex-wrap">
+            <img src="/sammy-marketing 1.png" alt="" className="h-24 md:h-32 object-contain" />
+            <img src="/sammy-man-and-girl-dancing-at-a-party 1.png" alt="" className="h-24 md:h-32 object-contain" />
+            <div className="text-center px-4">
+              <h1 className="text-4xl md:text-5xl font-bold mb-3 font-[var(--font-pacifico)]">
+                Activities Near Me
+              </h1>
+              <p className="text-xl text-orange-500/70">
+                Find amazing activities across the SF Bay Area
+              </p>
+            </div>
+            <img src="/sammy-24 1.png" alt="" className="h-24 md:h-32 object-contain" />
+            <img src="/sammy-meditation 1.png" alt="" className="h-24 md:h-32 object-contain" />
           </div>
-
-          
         </div>
       </header>
 
