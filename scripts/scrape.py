@@ -26,6 +26,14 @@ DEBUG_MODE = '--debug' in sys.argv
 TEST_MODE = '--test' in sys.argv
 DEBUG_DIR = Path('debug_logs')
 
+# Parse --source flag for comma-separated list of source names
+SOURCE_FILTER = None
+for arg in sys.argv:
+    if arg.startswith('--source='):
+        source_list = arg.split('=', 1)[1]
+        SOURCE_FILTER = [s.strip() for s in source_list.split(',') if s.strip()]
+        break
+
 # Constants
 RETRY_DELAY = 2  # seconds between retries
 MIN_CONTENT_LENGTH = 200  # minimum chars for valid content
@@ -253,6 +261,237 @@ def filter_events_by_date_range(events, today, max_date):
     return filtered
 
 
+def get_county_for_source(source_name):
+    """Get county for a source from SOURCES config."""
+    for s in SOURCES:
+        if s['name'] == source_name:
+            return s.get('county', 'san_francisco')
+    return 'san_francisco'
+
+
+COUNTY_SEAT_CITIES = {
+    'san_francisco': 'San Francisco',
+    'san_mateo': 'Redwood City',
+    'santa_clara': 'San Jose',
+    'alameda': 'Oakland',
+    'contra_costa': 'Martinez',
+    'marin': 'San Rafael',
+    'napa': 'Napa',
+    'sonoma': 'Santa Rosa',
+    'solano': 'Fairfield',
+    'all': 'unknown',
+}
+
+
+def get_county_seat_city(county):
+    """Get the county seat city for a given county."""
+    return COUNTY_SEAT_CITIES.get(county, 'San Francisco')
+
+
+def enhance_event_location(event, source_name):
+    """Enhance event with proper city and county using SERP if needed."""
+    city = event.get('city', '') or ''
+    county = event.get('county', '') or ''
+    location = event.get('location', '') or ''
+
+    config_county = get_county_for_source(source_name)
+
+    if not city or city.strip() == '':
+        if config_county == 'all':
+            city = 'unknown'
+        else:
+            city = get_county_seat_city(config_county)
+            county = config_county
+    elif not county or county.strip() == '':
+        if config_county != 'all':
+            county = config_county
+
+    if location and (not city or city == 'unknown') and config_county != 'all':
+        serp_result = lookup_location_with_serp(location, config_county)
+        if serp_result:
+            if serp_result.get('city') and city == 'unknown':
+                city = serp_result['city']
+            if serp_result.get('county'):
+                county = serp_result['county']
+
+    event['city'] = city
+    event['county'] = county
+    return event
+
+
+def build_serp_query(event):
+    """Build search query from event location or title."""
+    location = event.get('location', '').strip()
+    title = event.get('title', '').strip()
+    
+    if location and len(location) >= 3:
+        return location
+    elif title and len(title) >= 3:
+        return title
+    else:
+        return None
+
+
+def lookup_location_agent(search_term, config_county='san_francisco'):
+    """Use MiniMax M2.5 agent with Bright Data SERP to lookup location address."""
+    if not search_term or len(search_term) < 3:
+        return None
+
+    agent = Agent(
+        model=OpenAIChat(
+            id='MiniMax-M2.7',
+            api_key=os.getenv('MINIMAX_API_KEY'),
+            base_url='https://api.minimax.io/v1',
+        ),
+        tools=[
+            BrightDataTools(
+                api_key=os.getenv('BRIGHT_DATA_API_TOKEN'),
+                enable_scrape_markdown=False,
+                enable_screenshot=False,
+                enable_search_engine=True,
+                enable_web_data_feed=False,
+            )
+        ],
+        debug_mode=False,
+    )
+
+    prompt = f"""You are a location resolution agent for Bay Area events.
+
+Your task: Find the exact street address, city, and county for the location below.
+
+Search Query: {search_term}
+
+Instructions:
+1. Use the search_engine tool with the query "find me the address of event {search_term} Bay Area"
+2. Return ONLY valid JSON with this structure (no markdown, no explanation):
+{{
+    "address": "full street address with city and state, or null",
+    "city": "exact city name (San Francisco, Oakland, San Jose, etc.), or null",
+    "county": "san_francisco|san_mateo|santa_clara|alameda|contra_costa|marin|napa|sonoma|solano or null"
+}}
+
+Important:
+- Focus on the specific venue/location address, not general area
+- City should be the actual city where the venue is located
+- County should be the actual county, NOT default to san_francisco
+- If you cannot find a specific address, return null for all fields
+- Today's date is {date.today().isoformat()}."""
+
+    try:
+        response = agent.run(prompt)
+        content = str(response.content)
+        return parse_location_agent_response(content)
+    except Exception as e:
+        print(f"    [Location Agent Error] {e}")
+        return None
+
+
+def parse_location_agent_response(content):
+    """Parse JSON from agent response for location data."""
+    if not content:
+        return None
+
+    try:
+        if '```json' in content:
+            match = re.search(r'```json\s*([\s\S]*?)\s*```', content)
+            if match:
+                data = json.loads(match.group(1))
+            else:
+                data = json.loads(content)
+        else:
+            json_start = content.find('{')
+            json_end = content.rfind('}') + 1
+            if json_start != -1 and json_end > json_start:
+                data = json.loads(content[json_start:json_end])
+            else:
+                return None
+
+        result = {}
+        if data.get('address'):
+            result['address'] = data['address']
+        if data.get('city'):
+            result['city'] = data['city']
+        if data.get('county'):
+            county = data['county']
+            if county in ['san_francisco', 'san_mateo', 'santa_clara', 'alameda', 
+                          'contra_costa', 'marin', 'napa', 'sonoma', 'solano']:
+                result['county'] = county
+        return result if result else None
+
+    except (json.JSONDecodeError, Exception) as e:
+        return None
+
+
+def enhance_event_location(event, source_name):
+    """Enhance event with proper city, county, and address using SERP for every event."""
+    city = event.get('city', '') or ''
+    county = event.get('county', '') or ''
+    location = event.get('location', '') or ''
+    address = event.get('address', '') or ''
+
+    config_county = get_county_for_source(source_name)
+
+    search_term = build_serp_query(event)
+    
+    if search_term:
+        serp_result = lookup_location_agent(search_term, config_county)
+        if serp_result:
+            if serp_result.get('city'):
+                city = serp_result['city']
+            if serp_result.get('county'):
+                county = serp_result['county']
+            if serp_result.get('address'):
+                if address:
+                    event['address'] = f"{address}, {serp_result['address']}"
+                else:
+                    event['address'] = serp_result['address']
+
+    if not city or city == 'unknown':
+        if config_county == 'all':
+            city = 'unknown'
+        elif config_county != 'all':
+            city = get_county_seat_city(config_county)
+            if not county:
+                county = config_county
+
+    event['city'] = city
+    event['county'] = county
+    return event
+
+
+def county_from_city(city):
+    """Map city name to county."""
+    city_to_county = {
+        'San Francisco': 'san_francisco',
+        'Oakland': 'alameda',
+        'Berkeley': 'alameda',
+        'Alameda': 'alameda',
+        'Richmond': 'contra_costa',
+        'San Jose': 'santa_clara',
+        'Santa Clara': 'santa_clara',
+        'Palo Alto': 'santa_clara',
+        'Mountain View': 'santa_clara',
+        'Sunnyvale': 'santa_clara',
+        'San Rafael': 'marin',
+        'Mill Valley': 'marin',
+        'Novato': 'marin',
+        'Napa': 'napa',
+        'Vallejo': 'solano',
+        'Fairfield': 'solano',
+        'Santa Rosa': 'sonoma',
+        'Sonoma': 'sonoma',
+        'Redwood City': 'san_mateo',
+        'San Mateo': 'san_mateo',
+        'Half Moon Bay': 'san_mateo',
+        'Burlingame': 'san_mateo',
+        'Concord': 'contra_costa',
+        'Walnut Creek': 'contra_costa',
+        'Martinez': 'contra_costa',
+        'Antioch': 'contra_costa',
+    }
+    return city_to_county.get(city, 'san_francisco')
+
+
 def upsert_events(events, source_name):
     """Upsert events to Neon PostgreSQL."""
     if not events:
@@ -263,6 +502,7 @@ def upsert_events(events, source_name):
 
     values = []
     for e in events:
+        e = enhance_event_location(e, source_name)
         values.append((
             e.get('title', 'Unknown'),
             e.get('description', ''),
@@ -270,7 +510,8 @@ def upsert_events(events, source_name):
             e.get('time'),
             e.get('location'),
             e.get('city'),
-            e.get('county', 'san_francisco'),
+            e.get('county'),
+            e.get('address', ''),
             e.get('url') or e.get('source_url', ''),
             source_name,
             'free',
@@ -279,7 +520,7 @@ def upsert_events(events, source_name):
 
     query = """
         INSERT INTO events (
-            title, description, date, time, location, city, county,
+            title, description, date, time, location, city, county, address,
             source_url, source_name, price, category
         )
         VALUES %s
@@ -289,6 +530,9 @@ def upsert_events(events, source_name):
             date = EXCLUDED.date,
             time = EXCLUDED.time,
             location = EXCLUDED.location,
+            city = EXCLUDED.city,
+            county = EXCLUDED.county,
+            address = EXCLUDED.address,
             updated_at = NOW(),
             last_scraped_at = NOW()
     """
@@ -710,7 +954,16 @@ Now scrape {source['url']}{" page by page." if not TEST_MODE else " - ONLY scrap
 
 def main():
     print(f"Starting scrape at {datetime.now().isoformat()}")
-    print(f"Sources to scrape: {len(SOURCES)}")
+
+    # Filter sources if --source flag is provided
+    if SOURCE_FILTER:
+        sources_to_scrape = [s for s in SOURCES if s['name'] in SOURCE_FILTER]
+        print(f"Source filter: {SOURCE_FILTER}")
+        print(f"Sources to scrape: {len(sources_to_scrape)} ({', '.join([s['name'] for s in sources_to_scrape])})")
+    else:
+        sources_to_scrape = SOURCES
+        print(f"Sources to scrape: {len(sources_to_scrape)} (all)")
+
     print(f"Test mode: {TEST_MODE}, Debug mode: {DEBUG_MODE}")
 
     if not os.getenv('DATABASE_URL'):
@@ -728,7 +981,7 @@ def main():
     total_events = 0
     errors = []
 
-    for source in SOURCES:
+    for source in sources_to_scrape:
         print(f"\n=== Scraping: {source['name']} ===")
         print(f"    URL: {source['url']}")
 
