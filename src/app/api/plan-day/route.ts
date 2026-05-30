@@ -2,6 +2,68 @@ import { NextRequest, NextResponse } from 'next/server';
 import { planMyDay } from '@/lib/planAgent';
 import { PlanDayRequest } from '@/lib/types';
 
+const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+function parseDateFromQuery(lower: string): string {
+  if (lower.includes('tomorrow')) {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }
+
+  if (lower.includes('this weekend') || lower.includes('weekend')) {
+    const d = new Date();
+    const day = d.getDay();
+    const saturday = day <= 6 ? 6 - day : 6;
+    d.setDate(d.getDate() + saturday);
+    return d.toISOString().split('T')[0];
+  }
+
+  if (lower.includes('next week')) {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+  }
+
+  for (let i = 0; i < dayNames.length; i++) {
+    if (lower.includes(dayNames[i])) {
+      const d = new Date();
+      const currentDay = d.getDay();
+      let diff = i - currentDay;
+      if (diff <= 0) diff += 7;
+      d.setDate(d.getDate() + diff);
+      return d.toISOString().split('T')[0];
+    }
+  }
+
+  const monthDayMatch = lower.match(/(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?/i);
+  if (monthDayMatch) {
+    const monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+    const month = monthNames.indexOf(monthDayMatch[1].toLowerCase());
+    const day = parseInt(monthDayMatch[2], 10);
+    const d = new Date();
+    d.setMonth(month);
+    d.setDate(day);
+    return d.toISOString().split('T')[0];
+  }
+
+  const numericDateMatch = lower.match(/(\d{1,2})[\/-](\d{1,2})(?:[\/-]\d{2,4})?/);
+  if (numericDateMatch) {
+    const month = parseInt(numericDateMatch[1], 10) - 1;
+    const day = parseInt(numericDateMatch[2], 10);
+    const d = new Date();
+    d.setMonth(month);
+    d.setDate(day);
+    return d.toISOString().split('T')[0];
+  }
+
+  if (lower.includes('today')) {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  return new Date().toISOString().split('T')[0];
+}
+
 function parseNaturalLanguageQuery(query: string): {
   startTime?: string;
   endTime?: string;
@@ -14,7 +76,7 @@ function parseNaturalLanguageQuery(query: string): {
     endTime: '18:00',
     location: '',
     interests: [] as string[],
-    date: 'today',
+    date: new Date().toISOString().split('T')[0],
   };
 
   const lower = query.toLowerCase();
@@ -86,11 +148,7 @@ function parseNaturalLanguageQuery(query: string): {
     result.interests.push('kids');
   }
 
-  if (lower.includes('today')) {
-    result.date = 'today';
-  } else if (lower.includes('tomorrow')) {
-    result.date = 'tomorrow';
-  }
+  result.date = parseDateFromQuery(lower);
 
   if (result.interests.length === 0) {
     result.interests = ['general'];
@@ -112,7 +170,7 @@ export async function POST(request: NextRequest) {
         endTime: endTime || parsedNL.endTime || '18:00',
         location: location || parsedNL.location || '',
         interests: interests?.length ? interests : (parsedNL.interests.length ? parsedNL.interests : ['general']),
-        date: date || parsedNL.date || 'today',
+        date: date || parsedNL.date || new Date().toISOString().split('T')[0],
       };
 
       if (!planInput.location) {
@@ -145,7 +203,7 @@ export async function POST(request: NextRequest) {
       endTime: endTime || '18:00',
       location,
       interests: interests?.length ? interests : ['general'],
-      date: date || 'today',
+      date: date || new Date().toISOString().split('T')[0],
     });
 
     return NextResponse.json(plan);
