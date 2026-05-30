@@ -38,7 +38,8 @@ for arg in sys.argv:
 RETRY_DELAY = 2  # seconds between retries
 MIN_CONTENT_LENGTH = 200  # minimum chars for valid content
 MAX_RETRIES_PER_TIER = 2
-MAX_DAYS_AHEAD = 7
+MAX_DAYS_AHEAD = 2
+STOP_DAYS_AHEAD = 3
 MAX_PAGES_PER_SOURCE = 10
 
 from agno.agent import Agent
@@ -688,7 +689,7 @@ Return a JSON object with:
     ]
 }}
 
-Now scrape {source['url']}{" page by page." if not TEST_MODE else " - ONLY scrape page 1."}"""
+Now scrape {source['url']}{" page by page. IMPORTANT: Stop pagination when you encounter events that are 3 or more days from today - do not scrape additional pages beyond that point." if not TEST_MODE else " - ONLY scrape page 1."}"""
 
     try:
         response = agent.run(prompt)
