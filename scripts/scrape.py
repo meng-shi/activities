@@ -26,6 +26,14 @@ DEBUG_MODE = '--debug' in sys.argv
 TEST_MODE = '--test' in sys.argv
 DEBUG_DIR = Path('debug_logs')
 
+# Parse --source flag for comma-separated list of source names
+SOURCE_FILTER = None
+for arg in sys.argv:
+    if arg.startswith('--source='):
+        source_list = arg.split('=', 1)[1]
+        SOURCE_FILTER = [s.strip() for s in source_list.split(',') if s.strip()]
+        break
+
 # Constants
 RETRY_DELAY = 2  # seconds between retries
 MIN_CONTENT_LENGTH = 200  # minimum chars for valid content
@@ -710,7 +718,16 @@ Now scrape {source['url']}{" page by page." if not TEST_MODE else " - ONLY scrap
 
 def main():
     print(f"Starting scrape at {datetime.now().isoformat()}")
-    print(f"Sources to scrape: {len(SOURCES)}")
+
+    # Filter sources if --source flag is provided
+    if SOURCE_FILTER:
+        sources_to_scrape = [s for s in SOURCES if s['name'] in SOURCE_FILTER]
+        print(f"Source filter: {SOURCE_FILTER}")
+        print(f"Sources to scrape: {len(sources_to_scrape)} ({', '.join([s['name'] for s in sources_to_scrape])})")
+    else:
+        sources_to_scrape = SOURCES
+        print(f"Sources to scrape: {len(sources_to_scrape)} (all)")
+
     print(f"Test mode: {TEST_MODE}, Debug mode: {DEBUG_MODE}")
 
     if not os.getenv('DATABASE_URL'):
@@ -728,7 +745,7 @@ def main():
     total_events = 0
     errors = []
 
-    for source in SOURCES:
+    for source in sources_to_scrape:
         print(f"\n=== Scraping: {source['name']} ===")
         print(f"    URL: {source['url']}")
 
