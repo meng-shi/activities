@@ -9,12 +9,14 @@ Usage:
     python3 scripts/enrich_events.py --all                             # all events
     python3 scripts/enrich_events.py --limit=50                       # first 50 events
     python3 scripts/enrich_events.py --source=visitmarin --dry-run    # preview only
+    python3 scripts/enrich_events.py --first-enrichment-only         # only events with NULL county
 
 Flags:
     --source=<name1,name2>  : comma-separated source names (default: all)
     --all                   : enrich all events
     --limit=N               : process maximum N events
     --dry-run               : preview what would be enriched without writing to DB
+    --first-enrichment-only : only enrich events where county IS NULL
 """
 
 import json
@@ -34,6 +36,7 @@ SOURCE_FILTER = None
 LIMIT = None
 DRY_RUN = '--dry-run' in sys.argv
 PROCESS_ALL = '--all' in sys.argv
+FIRST_ENRICHMENT_ONLY = '--first-enrichment-only' in sys.argv
 
 for arg in sys.argv:
     if arg.startswith('--source='):
@@ -62,6 +65,9 @@ def fetch_events_to_enrich():
         placeholders = ','.join(['%s'] * len(SOURCE_FILTER))
         where_clauses.append(f"source_name IN ({placeholders})")
         params.extend(SOURCE_FILTER)
+
+    if FIRST_ENRICHMENT_ONLY:
+        where_clauses.append("county IS NULL")
 
     if where_clauses:
         where_sql = 'WHERE ' + ' AND '.join(where_clauses)
@@ -104,14 +110,20 @@ def main():
     if DRY_RUN:
         print("[DRY RUN MODE] - No changes will be written to database")
 
+    filter_parts = []
     if SOURCE_FILTER:
-        filter_desc = f"sources: {', '.join(SOURCE_FILTER)}"
+        filter_parts.append(f"sources: {', '.join(SOURCE_FILTER)}")
     elif PROCESS_ALL:
-        filter_desc = "all events"
+        filter_parts.append("all events")
     elif LIMIT:
-        filter_desc = f"first {LIMIT} events"
+        filter_parts.append(f"first {LIMIT} events")
     else:
-        filter_desc = "all events (no limit)"
+        filter_parts.append("all events (no limit)")
+
+    if FIRST_ENRICHMENT_ONLY:
+        filter_parts.append("county IS NULL")
+
+    filter_desc = ", ".join(filter_parts) if filter_parts else "all events"
 
     print(f"Filter: {filter_desc}")
 
