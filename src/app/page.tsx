@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Event } from '@/lib/types';
+import { formatInTimeZone } from 'date-fns-tz';
 import EventList from '@/components/EventList';
 import PlanMyDay from '@/components/PlanMyDay';
 
@@ -97,7 +98,7 @@ export default function Home() {
           const weekendEnd = new Date(weekendStart);
           weekendEnd.setDate(weekendStart.getDate() + 1);
           filtered = filtered.filter(e => {
-            const ed = new Date(e.date);
+            const ed = new Date(e.date + 'T12:00:00');
             return ed >= weekendStart && ed <= weekendEnd;
           });
           break;

@@ -1,7 +1,8 @@
 'use client';
 
 import { Event, COUNTY_LABELS, CATEGORY_LABELS } from '@/lib/types';
-import { format } from 'date-fns';
+import { parseISO } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 
 interface EventCardProps {
   event: Event;
@@ -21,77 +22,59 @@ const CATEGORY_EMOJI: Record<string, string> = {
   health: '🧘',
 };
 
+function formatEventDate(dateStr: string, formatStr: string): string {
+  try {
+    const date = parseISO(dateStr.split('T')[0]);
+    return formatInTimeZone(date, 'America/Los_Angeles', formatStr);
+  } catch {
+    return '';
+  }
+}
+
 export default function EventCard({ event, onClick }: EventCardProps) {
   const formattedDate = event.date
-    ? format(new Date(event.date), 'EEE, MMM d')
+    ? formatEventDate(event.date, 'EEE, MMM d')
     : 'Date TBA';
 
   const monthDay = event.date
-    ? format(new Date(event.date), 'd')
+    ? formatEventDate(event.date, 'd')
     : '--';
 
   const month = event.date
-    ? format(new Date(event.date), 'MMM')
+    ? formatEventDate(event.date, 'MMM')
     : '';
 
   return (
     <button
       onClick={onClick}
       className="event-card w-full text-left bg-white rounded-xl shadow-sm hover:shadow-lg border border-gray-100 overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#FF5833] focus:ring-offset-2"
-    >
+ >
       <div className="flex">
-        <div className="w-20 bg-gradient-to-br from-[#FF5833] to-[#FF8A50] flex flex-col items-center justify-center text-white py-3 flex-shrink-0">
-          <span className="text-2xl font-bold">{monthDay}</span>
-          <span className="text-sm uppercase">{month}</span>
+        <div className="bg-gradient-to-br from-[#FF5833] to-[#FF8A50] text-white text-center p-3 min-w-[70px]">
+          <div className="text-2xl font-bold">{monthDay}</div>
+          <div className="text-sm uppercase">{month}</div>
         </div>
-
         <div className="flex-1 p-4">
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <h3 className="font-semibold text-gray-900 line-clamp-2 leading-tight">
-              {event.title}
-            </h3>
-            <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap">
-              FREE
-            </span>
+          <div className="flex items-start justify-between">
+            <h3 className="font-semibold text-gray-900 leading-tight pr-2">{event.title}</h3>
+            {event.price && (
+              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded whitespace-nowrap">
+                {event.price}
+              </span>
+            )}
           </div>
-
-          {event.description && (
-            <p className="text-sm text-gray-500 line-clamp-2 mb-2">
-              {event.description}
-            </p>
+          {event.location && (
+            <p className="text-sm text-gray-500 mt-1 truncate">{event.location}</p>
           )}
-
-          <div className="flex items-center gap-3 text-sm text-gray-600 mb-3">
-            {event.time && (
-              <span className="flex items-center gap-1">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {event.time}
+          <div className="flex items-center gap-2 mt-2">
+            {event.category && CATEGORY_EMOJI[event.category] && (
+              <span className="text-sm">{CATEGORY_EMOJI[event.category]}</span>
+            )}
+            {event.county && (
+              <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+                {COUNTY_LABELS[event.county as keyof typeof COUNTY_LABELS] || event.county}
               </span>
             )}
-            {event.location && (
-              <span className="flex items-center gap-1 line-clamp-1">
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                </svg>
-                <span className="line-clamp-1">{event.location}</span>
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                {CATEGORY_EMOJI[event.category || 'community']} {event.category}
-              </span>
-            </div>
-            <span className="text-xs text-[#FF5833] font-medium flex items-center gap-1">
-              Details
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </span>
           </div>
         </div>
       </div>
