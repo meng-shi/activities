@@ -272,8 +272,8 @@ def upsert_events(events, source_name):
             e.get('date'),
             e.get('time'),
             e.get('location'),
-            e.get('city'),
-            e.get('county'),
+            None,  # city - only populated by enrichment
+            None,  # county - only populated by enrichment
             e.get('url') or e.get('source_url', ''),
             source_name,
             'free',
@@ -292,8 +292,6 @@ def upsert_events(events, source_name):
             date = EXCLUDED.date,
             time = EXCLUDED.time,
             location = EXCLUDED.location,
-            city = EXCLUDED.city,
-            county = EXCLUDED.county,
             updated_at = NOW(),
             last_scraped_at = NOW()
     """
