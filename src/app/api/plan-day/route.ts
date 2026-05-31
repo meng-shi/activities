@@ -2,6 +2,66 @@ import { NextRequest, NextResponse } from 'next/server';
 import { planMyDay } from '@/lib/planAgent';
 import { PlanDayRequest } from '@/lib/types';
 
+const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+function parseDateFromQuery(lower: string): string {
+  const today = new Date().toISOString().split('T')[0];
+
+  if (lower.includes('tomorrow')) {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }
+
+  if (lower.includes('this weekend') || lower.includes('weekend')) {
+    const d = new Date();
+    const day = d.getDay();
+    const saturday = day <= 6 ? 6 - day : 6;
+    d.setDate(d.getDate() + saturday);
+    return d.toISOString().split('T')[0];
+  }
+
+  if (lower.includes('next week')) {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+  }
+
+  for (let i = 0; i < dayNames.length; i++) {
+    if (lower.includes(dayNames[i])) {
+      const d = new Date();
+      const currentDay = d.getDay();
+      let diff = i - currentDay;
+      if (diff <= 0) diff += 7;
+      d.setDate(d.getDate() + diff);
+      return d.toISOString().split('T')[0];
+    }
+  }
+
+  const monthDayMatch = lower.match(/(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?/i);
+  if (monthDayMatch) {
+    const monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+    const month = monthNames.indexOf(monthDayMatch[1].toLowerCase());
+    const day = parseInt(monthDayMatch[2], 10);
+    const d = new Date();
+    d.setMonth(month);
+    d.setDate(day);
+    return d.toISOString().split('T')[0];
+  }
+
+  const numericDateMatch = lower.match(/(\d{1,2})[\/-](\d{1,2})(?:[\/-]\d{2,4})?/);
+  if (numericDateMatch) {
+    const month = parseInt(numericDateMatch[1], 10) - 1;
+    const day = parseInt(numericDateMatch[2], 10);
+    const d = new Date();
+    d.setMonth(month);
+    d.setDate(day);
+    return d.toISOString().split('T')[0];
+  }
+
+  return today;
+}
+
 function parseNaturalLanguageQuery(query: string): {
   startTime?: string;
   endTime?: string;
@@ -14,11 +74,12 @@ function parseNaturalLanguageQuery(query: string): {
     endTime: '18:00',
     location: '',
     interests: [] as string[],
-    date: 'today',
+    date: new Date().toISOString().split('T')[0],
   };
 
   const lower = query.toLowerCase();
 
+  // Parse time range: "10am-2pm", "10:00-14:00", "from 10 to 2"
   const timeRangeMatch = lower.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*[-to]+\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
   if (timeRangeMatch) {
     let startHour = parseInt(timeRangeMatch[1], 10);
@@ -32,9 +93,9 @@ function parseNaturalLanguageQuery(query: string): {
     result.endTime = `${endHour.toString().padStart(2, '0')}:${timeRangeMatch[5] || '00'}`;
   }
 
+  // Parse location: stop before date/time/interest words
   const locationPatterns = [
-    /(?:in|near|around|at)\s+([a-z\s]+?)(?:\s+from|\s+for|\s+with|\s+with my|\s+with my|\s*$)/i,
-    /(?:in|near|around|at)\s+([a-z\s]+?)(?:\s+\d)/i,
+    /(?:in|near|around|at)\s+([a-z\s]+?)(?:\s+(?:on|from|for|with|this|next|today|tomorrow|weekend|\d))/i,
     /(?:in|near|around|at)\s+([a-z\s]+?)$/i,
   ];
 
@@ -48,7 +109,7 @@ function parseNaturalLanguageQuery(query: string): {
 
   if (!result.location) {
     const locationWords = [
-      'oakland', 'berkeley', 'san francisco', 'sf', 'san jose', 'palo alto',
+      'san francisco', 'sf', 'oakland', 'berkeley', 'san jose', 'palo alto',
       'mountain view', 'sunnyvale', 'fremont', 'richmond', 'concord', 'walnut creek',
       'san mateo', 'redwood city', 'menlo park', 'marin', 'sonoma', 'napa', 'vallejo',
       'east bay', 'south bay', 'peninsula', 'north bay',
@@ -61,16 +122,9 @@ function parseNaturalLanguageQuery(query: string): {
     }
   }
 
-  const interestPatterns = [
-    /with (?:my )?(family|kids|children|friends|partner|kids and adults)/i,
-    /(?:for |looking for )?(family|kids|children)/i,
-    /(?:interested in |like |love )?(music|art|outdoor|nature|sports|fitness|food|dancing)/gi,
-    /(?:doing |going to |attending )?(live music|concert|art exhibit|hiking|picnic|tennis)/gi,
-  ];
-
   const interestKeywords = [
     'family', 'kids', 'children', 'music', 'art', 'outdoor', 'nature',
-    'sports', 'fitness', 'food', 'art', 'concert', 'dancing', 'workshop',
+    'sports', 'fitness', 'food', 'concert', 'dancing', 'workshop',
     'library', 'books', 'community', 'wellness', 'health',
   ];
 
@@ -86,11 +140,7 @@ function parseNaturalLanguageQuery(query: string): {
     result.interests.push('kids');
   }
 
-  if (lower.includes('today')) {
-    result.date = 'today';
-  } else if (lower.includes('tomorrow')) {
-    result.date = 'tomorrow';
-  }
+  result.date = parseDateFromQuery(lower);
 
   if (result.interests.length === 0) {
     result.interests = ['general'];
@@ -112,7 +162,7 @@ export async function POST(request: NextRequest) {
         endTime: endTime || parsedNL.endTime || '18:00',
         location: location || parsedNL.location || '',
         interests: interests?.length ? interests : (parsedNL.interests.length ? parsedNL.interests : ['general']),
-        date: date || parsedNL.date || 'today',
+        date: date || parsedNL.date || new Date().toISOString().split('T')[0],
       };
 
       if (!planInput.location) {
@@ -145,7 +195,7 @@ export async function POST(request: NextRequest) {
       endTime: endTime || '18:00',
       location,
       interests: interests?.length ? interests : ['general'],
-      date: date || 'today',
+      date: date || new Date().toISOString().split('T')[0],
     });
 
     return NextResponse.json(plan);

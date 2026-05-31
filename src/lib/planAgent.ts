@@ -1,13 +1,19 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { Event, DayPlan, DayPlanInput, PlannedActivity } from './types';
-import { searchEventsForPlanning } from './db';
 
-function formatTime(time: string | null): string {
-  if (!time) return 'TBD';
-  const [hours, minutes] = time.split(':');
-  const h = parseInt(hours, 10);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 || 12;
-  return `${h12}:${minutes} ${ampm}`;
+function loadEventsFromJson(): Event[] {
+  const data = readFileSync(join(process.cwd(), 'public', 'events.json'), 'utf-8');
+  const parsed = JSON.parse(data);
+  return (parsed.events || []) as Event[];
+}
+
+function filterEventsByDate(events: Event[], date: string): Event[] {
+  return events.filter(e => {
+    if (!e.date) return false;
+    const eventDate = e.date.slice(0, 10);
+    return eventDate === date;
+  });
 }
 
 function parseTimeToMinutes(time: string | null): number | null {
@@ -37,7 +43,7 @@ USER CONSTRAINTS:
 - Location preference: ${input.location}
 - Interests: ${input.interests.join(', ') || 'general'}
 
-AVAILABLE EVENTS FROM DATABASE:
+AVAILABLE EVENTS (all on ${input.date}):
 ${eventsContext}
 
 TASK:
@@ -164,20 +170,15 @@ function createFallbackPlan(events: Event[], input: DayPlanInput): DayPlan {
 
 export async function planMyDay(input: DayPlanInput): Promise<DayPlan> {
   try {
-    const events = await searchEventsForPlanning(
-      input.location,
-      input.interests,
-      input.date,
-      input.startTime,
-      input.endTime
-    );
+    const allEvents = loadEventsFromJson();
+    const events = filterEventsByDate(allEvents, input.date);
 
     if (events.length === 0) {
       return {
         date: input.date,
         location: input.location,
         activities: [],
-        summary: `No events found matching your criteria in ${input.location}. Try broadening your search or selecting a different location.`,
+        summary: `No events found for ${input.date}. Try a different date.`,
         eventsCount: 0,
       };
     }
