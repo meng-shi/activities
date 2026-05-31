@@ -67,7 +67,7 @@ def fetch_events_to_enrich():
         params.extend(SOURCE_FILTER)
 
     if FIRST_ENRICHMENT_ONLY:
-        where_clauses.append("county IS NULL")
+        where_clauses.append("(county IS NULL OR event_detail IS NULL)")
 
     if where_clauses:
         where_sql = 'WHERE ' + ' AND '.join(where_clauses)
