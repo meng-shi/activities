@@ -105,10 +105,10 @@ export default function EventModal({ event, onClose }: EventModalProps) {
                     <svg className="w-4 h-4 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    <span className="text-gray-700">{item.item}</span>
-                    {item.url && (
+                    <span className="text-gray-700">{item.name}</span>
+                    {item.link && (
                       <a
-                        href={item.url}
+                        href={item.link}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-orange-600 hover:text-orange-700 text-sm ml-2"

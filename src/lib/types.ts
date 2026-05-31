@@ -24,8 +24,8 @@ export interface Event {
 }
 
 export interface Item {
-  item: string;
-  url: string;
+  name: string;
+  link: string;
 }
 
 export interface EventSource {
