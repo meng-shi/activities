@@ -62,11 +62,9 @@ SOURCES = [
     {'name': 'smcl', 'url': 'https://smcl.org', 'county': 'san_mateo', 'category': 'library'},
     {'name': 'dothebay', 'url': 'https://dothebay.com/free', 'county': 'all', 'category': 'community'},
     {'name': 'eventbrite', 'url': 'https://www.eventbrite.com/d/ca--san-francisco/free--events', 'county': 'all', 'category': 'community'},
-    {'name': '19hz', 'url': 'https://19hz.info', 'county': 'all', 'category': 'music'},
 
     # NEW SOURCES - Non-duplicated coverage
     # San Mateo
-    {'name': 'historysmc', 'url': 'https://historysmc.org/events-calendar/', 'county': 'san_mateo', 'category': 'community'},
 
     # Santa Clara
     {'name': 'sccparks', 'url': 'https://parks.santaclaracounty.gov/events', 'county': 'santa_clara', 'category': 'outdoors'},
@@ -74,7 +72,6 @@ SOURCES = [
 
     # Alameda
     {'name': '510families', 'url': 'https://www.510families.com/calendar/', 'county': 'alameda', 'category': 'family'},
-    {'name': 'eastbayexpress', 'url': 'https://eastbayexpress.com/events-calendar/', 'county': 'alameda', 'category': 'community'},
 
     # Contra Costa (no coverage before!)
     {'name': 'contracostalive', 'url': 'https://www.contracostalive.com/event', 'county': 'contra_costa', 'category': 'community'},
@@ -85,16 +82,13 @@ SOURCES = [
     {'name': 'visitmarin', 'url': 'https://www.visitmarin.org/event-calendar/', 'county': 'marin', 'category': 'community'},
     {'name': 'marinarts', 'url': 'https://marinarts.org/event/', 'county': 'marin', 'category': 'arts'},
 
-    # Napa (napalib broken, now have working sources!)
+    # Napa
     {'name': 'cityofnapa', 'url': 'https://www.cityofnapa.org/395/Community-Events', 'county': 'napa', 'category': 'community'},
-    {'name': 'napaoutdoors', 'url': 'https://napaoutdoors.org/events/', 'county': 'napa', 'category': 'outdoors'},
 
     # Previously failed sources - keeping for retry assessment
     {'name': 'sf_recpark', 'url': 'https://sfrecpark.org/Calendar.aspx', 'county': 'san_francisco', 'category': 'outdoors'},
-    {'name': 'berkeleypl', 'url': 'https://berkeleypubliclibrary.org', 'county': 'alameda', 'category': 'library'},
     {'name': 'ccclib', 'url': 'https://ccclib.org', 'county': 'contra_costa', 'category': 'library'},
     {'name': 'solanolib', 'url': 'https://solanolibrary.com', 'county': 'solano', 'category': 'library'},
-    {'name': 'napalib', 'url': 'https://napalibrary.org', 'county': 'napa', 'category': 'library'},
     {'name': 'reddit_bayarea', 'url': 'https://www.reddit.com/r/bayarea/', 'county': 'all', 'category': 'community'},
     {'name': 'richmond_parks', 'url': 'https://ci.richmond.ca.us', 'county': 'contra_costa', 'category': 'outdoors'},
 ]
@@ -279,7 +273,7 @@ def upsert_events(events, source_name):
             e.get('time'),
             e.get('location'),
             e.get('city'),
-            e.get('county', 'san_francisco'),
+            e.get('county'),
             e.get('url') or e.get('source_url', ''),
             source_name,
             'free',
@@ -298,6 +292,8 @@ def upsert_events(events, source_name):
             date = EXCLUDED.date,
             time = EXCLUDED.time,
             location = EXCLUDED.location,
+            city = EXCLUDED.city,
+            county = EXCLUDED.county,
             updated_at = NOW(),
             last_scraped_at = NOW()
     """
