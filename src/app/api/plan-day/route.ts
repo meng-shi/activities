@@ -91,6 +91,21 @@ function parseNaturalLanguageQuery(query: string): {
     if (timeRangeMatch[6] === 'pm' && endHour < 12) endHour += 12;
     if (timeRangeMatch[6] === 'am' && endHour === 12) endHour = 0;
     result.endTime = `${endHour.toString().padStart(2, '0')}:${timeRangeMatch[5] || '00'}`;
+  } else {
+    // Parse time-of-day keywords
+    if (/\b(morning)\b/.test(lower)) {
+      result.startTime = '08:00';
+      result.endTime = '12:00';
+    } else if (/\b(afternoon)\b/.test(lower)) {
+      result.startTime = '12:00';
+      result.endTime = '18:00';
+    } else if (/\b(evening)\b/.test(lower)) {
+      result.startTime = '15:00';
+      result.endTime = '20:00';
+    } else if (/\b(night|tonight)\b/.test(lower)) {
+      result.startTime = '17:00';
+      result.endTime = '23:00';
+    }
   }
 
   // Parse location: stop before date/time/interest words
