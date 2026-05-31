@@ -183,33 +183,34 @@ export async function planMyDay(input: DayPlanInput): Promise<DayPlan> {
       };
     }
 
-    if (!process.env.MINIMAX_API_KEY) {
+    if (!process.env.AIML_API_KEY) {
       return createFallbackPlan(events, input);
     }
 
     const prompt = buildPlanningPrompt(input, events);
 
     const response = await fetch(
-      `${process.env.MINIMAX_BASE_URL || 'https://api.minimax.io/v1'}/text/chatcompletion_v2`,
+      'https://api.aimlapi.com/v1/chat/completions',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.MINIMAX_API_KEY}`,
+          'Authorization': `Bearer ${process.env.AIML_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'MiniMax-M2.5',
+          model: 'gpt-4o',
           messages: [
+            { role: 'system', content: 'You are a helpful event planning assistant for the SF Bay Area. Return only valid JSON.' },
             { role: 'user', content: prompt }
           ],
-          max_tokens: 2000,
+          max_tokens: 10000,
           temperature: 0.7,
         }),
       }
     );
 
     if (!response.ok) {
-      console.error('Minimax API error:', response.status);
+      console.error('AI/ML API error:', response.status);
       return createFallbackPlan(events, input);
     }
 
